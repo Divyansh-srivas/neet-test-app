@@ -1,0 +1,186 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0a0f1e;
+  --surface: #111827;
+  --surface2: #1a2236;
+  --border: #1f2d45;
+  --accent: #6366f1;
+  --accent2: #8b5cf6;
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --text: #f1f5f9;
+  --muted: #64748b;
+  --physics: #6366f1;
+  --chemistry: #10b981;
+  --biology: #f59e0b;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  caret-color: transparent;
+}
+
+input, textarea {
+  caret-color: auto;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.font-display { font-family: 'Space Grotesk', sans-serif; }
+
+/* Quote popup animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+/* Themes */
+body.theme-light {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface2: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+}
+body.theme-light input, body.theme-light select, body.theme-light textarea {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Accents */
+body.accent-Blue {
+  --accent: #3b82f6;
+  --accent2: #60a5fa;
+  --physics: #3b82f6;
+}
+body.accent-Purple {
+  --accent: #8b5cf6;
+  --accent2: #a855f7;
+  --physics: #8b5cf6;
+}
+body.accent-Green {
+  --accent: #10b981;
+  --accent2: #34d399;
+  --physics: #10b981;
+}
+body.accent-Red {
+  --accent: #ef4444;
+  --accent2: #f87171;
+  --physics: #ef4444;
+}
+body.accent-Orange {
+  --accent: #f97316;
+  --accent2: #fb923c;
+  --physics: #f97316;
+}
+body.accent-Teal {
+  --accent: #14b8a6;
+  --accent2: #2dd4bf;
+  --physics: #14b8a6;
+}
+
+
+/* Layout & Accessibility */
+body.layout-compact {
+  font-size: 0.9rem;
+}
+body.layout-compact .main-content {
+  padding: 10px !important;
+}
+
+/* 1. Larger Text */
+body.text-large {
+  font-size: 1.15rem;
+}
+body.text-large h1, body.text-large h2, body.text-large h3 {
+  font-size: 1.25em;
+}
+body.text-large button, body.text-large input, body.text-large select {
+  font-size: 1rem;
+}
+
+/* 2. Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+body.motion-reduced * {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+  transform: none !important;
+}
+
+/* 3. High Contrast */
+body.contrast-high {
+  --border: #ffffff;
+  --text: #ffffff;
+  --muted: #e2e8f0;
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --surface2: #111111;
+}
+body.contrast-high.theme-light {
+  --border: #000000;
+  --text: #000000;
+  --muted: #1e293b;
+  --bg: #ffffff;
+  --surface: #f1f5f9;
+  --surface2: #e2e8f0;
+}
+body.contrast-high * {
+  border-width: 2px !important;
+}
+
+/* 4. Keyboard Navigation */
+body.keyboard-nav *:focus-visible {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: 3px !important;
+  border-radius: 4px;
+}
+
+/* 5. Screen Reader Utilities */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent);
+  color: white;
+  padding: 8px;
+  z-index: 9999;
+  transition: top 0.2s;
+}
+.skip-link:focus {
+  top: 0;
+}
