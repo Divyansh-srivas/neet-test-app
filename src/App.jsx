@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { getSettings } from './utils/storage'
 import { AuthProvider, useAuth } from './utils/useAuth.jsx'
+import { auth } from './utils/firebase'
+import { isSignInWithEmailLink } from 'firebase/auth'
 import AuthPage from './pages/AuthPage'
 import Navbar from './components/Navbar'
 import Dashboard from './pages/Dashboard'
@@ -18,9 +20,56 @@ import { JobProvider } from './utils/JobContext'
 import JobProgressWidget from './components/JobProgressWidget'
 
 function AppContent() {
-  const { user, profile, loading, signOut } = useAuth()
+  const { user, profile, loading, signOut, completeEmailSignIn } = useAuth()
   const [page, setPage] = useState('dashboard')
   const [activeTest, setActiveTest] = useState(null)
+  const [isEmailLinkTab, setIsEmailLinkTab] = useState(() => isSignInWithEmailLink(auth, window.location.href))
+  const [signInComplete, setSignInComplete] = useState(false)
+  const [emailLinkError, setEmailLinkError] = useState('')
+
+  // Auto-complete sign-in when user clicks the Firebase email link
+  useEffect(() => {
+    if (!isEmailLinkTab) return
+    const params = new URLSearchParams(window.location.search)
+    let email = params.get('signinEmail') || sessionStorage.getItem('emailForSignIn')
+    if (!email) {
+      email = window.prompt('Please confirm your email address to complete sign-in:')
+    }
+    if (email) {
+      const fullName = sessionStorage.getItem('emailSignInName') || ''
+      completeEmailSignIn(email, window.location.href, fullName).then(({ error }) => {
+        if (error) {
+          setEmailLinkError(error.message)
+          setIsEmailLinkTab(false)
+        } else {
+          // Broadcast to all open tabs so the original tab updates instantly
+          try {
+            const bc = new BroadcastChannel('neogravix_auth')
+            bc.postMessage({ type: 'SIGN_IN_COMPLETE' })
+            bc.close()
+          } catch (_) {}
+          // Clean URL
+          window.history.replaceState({}, document.title, '/')
+          setSignInComplete(true)
+          // Try to close this tab — works only if opened by window.open()
+          // For links opened by email clients this usually won't work
+          setTimeout(() => { try { window.close() } catch (_) {} }, 300)
+        }
+      })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for sign-in broadcast from another tab
+  useEffect(() => {
+    const bc = new BroadcastChannel('neogravix_auth')
+    bc.onmessage = (e) => {
+      if (e.data?.type === 'SIGN_IN_COMPLETE') {
+        // Firebase onAuthStateChanged will auto-update; just reload to be safe
+        window.location.reload()
+      }
+    }
+    return () => bc.close()
+  }, [])
 
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
@@ -32,10 +81,36 @@ function AppContent() {
     }
   }, []);
 
+  // Show sign-in complete screen in the new tab
+  if (signInComplete) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 20, padding: 20 }}>
+        <div style={{ width: 68, height: 68, borderRadius: 20, background: 'linear-gradient(135deg, rgba(34,197,94,0.2), rgba(59,130,246,0.2))', border: '1px solid rgba(34,197,94,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 32 }}>✅</span>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <h2 style={{ color: 'white', fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Signed In Successfully!</h2>
+          <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.6 }}>You can close this tab and go back to the original tab.<br />You are now logged in there too.</p>
+        </div>
+        <button onClick={() => window.close()} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: 'white', fontWeight: 600, fontSize: 14 }}>
+          Close This Tab
+        </button>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-        <div style={{ color: 'var(--muted)' }}>Loading...</div>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 16 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 15 }}>
+          {isEmailLinkTab ? '✉️ Completing sign-in...' : 'Loading...'}
+        </div>
+        {emailLinkError && (
+          <div style={{ color: '#fca5a5', fontSize: 14, maxWidth: 360, textAlign: 'center', padding: '12px 20px', background: 'rgba(239,68,68,0.1)', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)' }}>
+            {emailLinkError}<br />
+            <button onClick={() => window.location.href = '/'} style={{ marginTop: 10, background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', textDecoration: 'underline', fontSize: 13 }}>← Go back and try again</button>
+          </div>
+        )}
       </div>
     )
   }

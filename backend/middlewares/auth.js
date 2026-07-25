@@ -1,9 +1,9 @@
 import admin from 'firebase-admin';
 
-// Initialize Firebase Admin with just the project ID to verify tokens securely
+// Initialize Firebase Admin — project ID read from env so it works across environments
 if (!admin.apps.length) {
   admin.initializeApp({
-    projectId: 'neogravix-2afa2'
+    projectId: process.env.FIREBASE_PROJECT_ID || 'neogravix-v2'
   });
 }
 

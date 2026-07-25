@@ -146,7 +146,7 @@ export default function SettingsPage() {
   // Sessions State
   const [sessions, setSessions] = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
-  const currentSessionId = localStorage.getItem('neogravix_session_id')
+  const currentSessionId = sessionStorage.getItem('neogravix_session_id')
 
   const handleReset = () => {
     if (window.confirm('Are you sure you want to reset all preferences to their default values?')) {
@@ -370,8 +370,9 @@ export default function SettingsPage() {
         // Revoke tokens globally in Supabase
         await supabase.auth.signOut({ scope: 'global' });
       } catch (e) {}
-      // Clear local state
+      // Clear all local state
       localStorage.clear();
+      sessionStorage.clear();
       window.location.href = '/';
     }
   }
