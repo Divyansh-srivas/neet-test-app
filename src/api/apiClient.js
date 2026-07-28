@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase/auth';
 
-export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://neet-test-backend.onrender.com';
 
 /**
  * A wrapper around fetch that automatically gets the Firebase ID token

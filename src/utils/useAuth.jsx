@@ -60,7 +60,7 @@ export function AuthProvider({ children }) {
     try {
       if (!auth.currentUser) { setLoading(false); return; }
       const token = await auth.currentUser.getIdToken()
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/profile`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://neet-test-backend.onrender.com'}/api/profile`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (res.ok) {
@@ -87,7 +87,7 @@ export function AuthProvider({ children }) {
 
     try {
       const token = await auth.currentUser.getIdToken()
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/profile`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://neet-test-backend.onrender.com'}/api/profile`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
@@ -162,7 +162,7 @@ export function AuthProvider({ children }) {
       if (fullName && fullName.trim()) {
         try {
           const token = await firebaseUser.getIdToken()
-          await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/profile`, {
+          await fetch(`${import.meta.env.VITE_API_URL || 'https://neet-test-backend.onrender.com'}/api/profile`, {
             method: 'PUT',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ full_name: fullName.trim() })
