@@ -1,13 +1,13 @@
 import { Worker } from 'bullmq';
 import { connection, queues } from '../queue/index.js';
-import { createScopedClient } from '../config/supabase.js';
+import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { splitPdfIntoChunk, getTotalPages } from '../services/pdf.service.js';
 
 export const createPdfWorker = (io) => {
     return new Worker('pdf-upload', async job => {
-        const { uploadId, userId, filePath, token, testName, duration } = job.data;
-        const supabase = createScopedClient(token);
+        const { uploadId, userId, filePath, storagePath, token, testName, duration } = job.data;
+        const supabase = supabaseAdmin;
         
         io.to(userId).emit('job-started', { jobId: job.id });
         
@@ -17,7 +17,7 @@ export const createPdfWorker = (io) => {
                 id: job.id,
                 user_id: userId,
                 upload_id: uploadId,
-                status: 'Uploading',
+                status: 'processing',
                 progress: 5
             }).select().single();
             if (jobErr) throw jobErr;
@@ -26,13 +26,14 @@ export const createPdfWorker = (io) => {
             
             const totalPages = await getTotalPages(filePath);
             
-            await supabase.from('jobs').update({ total_pages: totalPages, status: 'Processing' }).eq('id', job.id);
+            await supabase.from('jobs').update({ total_pages: totalPages, status: 'processing' }).eq('id', job.id);
             
             // Queue up AI extraction job
             await queues.aiExtraction.add('extract-pdf', {
                 jobId: job.id,
                 userId,
                 filePath,
+                storagePath,
                 totalPages,
                 token,
                 testName,

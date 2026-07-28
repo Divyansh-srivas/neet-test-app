@@ -17,7 +17,9 @@ const redisOptions = {
   }
 };
 
-export const connection = new Redis(redisOptions);
+export const connection = process.env.REDIS_URL 
+    ? new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null, tls: { rejectUnauthorized: false } })
+    : new Redis(redisOptions);
 
 connection.on('error', (err) => {
     if (!connection._hasLoggedError) {

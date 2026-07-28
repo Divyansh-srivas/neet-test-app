@@ -96,11 +96,9 @@ export default function NotesPad({ testId, isVisible, onClose }) {
   };
 
   const handleClear = () => {
-    if (window.confirm("Are you sure you want to clear your notes?")) {
-      setContent('');
-      localStorage.removeItem(`notes_${testId}`);
-      syncToBackend();
-    }
+    setContent('');
+    localStorage.removeItem(`notes_${testId}`);
+    syncToBackend();
   };
 
   if (!isVisible) return null;

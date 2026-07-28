@@ -26,6 +26,7 @@ function AppContent() {
   const [isEmailLinkTab, setIsEmailLinkTab] = useState(() => isSignInWithEmailLink(auth, window.location.href))
   const [signInComplete, setSignInComplete] = useState(false)
   const [emailLinkError, setEmailLinkError] = useState('')
+  const [forcePasswordScreen, setForcePasswordScreen] = useState(false)
 
   // Auto-complete sign-in when user clicks the Firebase email link
   useEffect(() => {
@@ -36,24 +37,30 @@ function AppContent() {
       email = window.prompt('Please confirm your email address to complete sign-in:')
     }
     if (email) {
-      const fullName = sessionStorage.getItem('emailSignInName') || ''
-      completeEmailSignIn(email, window.location.href, fullName).then(({ error }) => {
+      const fullName = params.get('name') || sessionStorage.getItem('emailSignInName') || ''
+      completeEmailSignIn(email, window.location.href, fullName).then(({ data, error }) => {
         if (error) {
           setEmailLinkError(error.message)
           setIsEmailLinkTab(false)
         } else {
-          // Broadcast to all open tabs so the original tab updates instantly
-          try {
-            const bc = new BroadcastChannel('neogravix_auth')
-            bc.postMessage({ type: 'SIGN_IN_COMPLETE' })
-            bc.close()
-          } catch (_) {}
           // Clean URL
           window.history.replaceState({}, document.title, '/')
-          setSignInComplete(true)
-          // Try to close this tab — works only if opened by window.open()
-          // For links opened by email clients this usually won't work
-          setTimeout(() => { try { window.close() } catch (_) {} }, 300)
+          
+          if (data.needsPassword) {
+             // Don't close tab, let them set password
+             setForcePasswordScreen(true)
+             setIsEmailLinkTab(false)
+          } else {
+             // Broadcast to all open tabs so the original tab updates instantly
+             try {
+               const bc = new BroadcastChannel('neogravix_auth')
+               bc.postMessage({ type: 'SIGN_IN_COMPLETE' })
+               bc.close()
+             } catch (_) {}
+             
+             setSignInComplete(true)
+             setTimeout(() => { try { window.close() } catch (_) {} }, 300)
+          }
         }
       })
     }
@@ -115,7 +122,7 @@ function AppContent() {
     )
   }
 
-  if (!user) return <AuthPage />
+  if (!user || forcePasswordScreen) return <AuthPage forceSetPassword={forcePasswordScreen} />
 
   const isExam = page === 'exam' || page === 'pretest'
 

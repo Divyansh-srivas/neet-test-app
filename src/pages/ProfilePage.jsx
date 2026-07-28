@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { getProfile, saveProfile } from '../utils/storage'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts'
 import { User, Edit2, Save, Trophy, Target, TrendingUp, BookOpen, Clock, AlertTriangle, Award } from 'lucide-react'
-import { getPerformanceSettings, getUserAnalytics, getRankings } from '../api/performance'
+import { getUserAnalytics, getRankings } from '../api/performance'
 import { useAuth } from '../utils/useAuth'
 
 const card = (style = {}) => ({ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, ...style })
@@ -14,7 +14,7 @@ export default function ProfilePage() {
   const [tests, setTests] = useState([])
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: '', target: 'NEET 2025' })
-  
+
   const [perfSettings, setPerfSettings] = useState(null)
   const [rankings, setRankings] = useState(null)
 
@@ -26,21 +26,28 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (authProfile?.id) {
-      getPerformanceSettings(authProfile.id).then(setPerfSettings).catch(console.error)
+      const settings = authProfile.accessibility_settings || {};
+      setPerfSettings({
+        perfAccuracy: settings.perfAccuracy ?? true,
+        perfTime: settings.perfTime ?? true,
+        perfSubject: settings.perfSubject ?? true,
+        perfWeak: settings.perfWeak ?? true,
+        perfRank: settings.perfRank ?? false,
+      })
       getUserAnalytics(authProfile.id).then(data => {
         setAnalytics(data)
         setTests(data.tests || [])
       }).catch(console.error)
       getRankings(authProfile.id).then(setRankings).catch(console.error)
     }
-  }, [authProfile?.id])
+  }, [authProfile])
 
   const handleSave = async () => {
     if (authProfile?.id && updateProfile) {
       // Optimistic update of local form target if any
       setProfile(p => ({ ...p, target: form.target }))
       setEditing(false)
-      
+
       // Update global context & DB without refreshing
       await updateProfile({ full_name: form.name })
     } else {
@@ -138,7 +145,7 @@ export default function ProfilePage() {
               <div style={{ fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: 700 }}>{analytics.testCount}</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Tests Done</div>
             </div>
-            
+
             <div style={card()}>
               <div style={{ width: 32, height: 32, borderRadius: 8, background: 'color-mix(in srgb, var(--yellow) 13%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
                 <Trophy size={15} color="var(--yellow)" />
@@ -285,13 +292,13 @@ export default function ProfilePage() {
                   </thead>
                   <tbody>
                     {tests.map((testAttempt, i) => {
-                      const test = testAttempt.tests || testAttempt; 
+                      const test = testAttempt.tests || testAttempt;
                       // Wait, getUserAnalytics returns tests mapped slightly differently?
                       // Let's assume test is the attempts row and test.tests is the test data
                       const answers = testAttempt.answers || {};
                       const finalScore = testAttempt.final_score || testAttempt.score || 0;
                       const maxScore = testAttempt.max_score || testAttempt.maxScore || 0;
-                      
+
                       const subStats = { physics: { c: 0, t: 0 }, chemistry: { c: 0, t: 0 }, biology: { c: 0, t: 0 } }
                       test.questions?.forEach(q => {
                         const s = q.subject?.toLowerCase()

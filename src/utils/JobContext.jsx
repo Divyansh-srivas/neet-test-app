@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './useAuth';
 import { fetchAPI, BACKEND_URL } from '../api/apiClient';
+import { saveTest } from './storage';
 
 const JobContext = createContext(null);
 
@@ -9,6 +10,7 @@ export function JobProvider({ children }) {
   const { user } = useAuth();
   const [socket, setSocket] = useState(null);
   const [activeJobs, setActiveJobs] = useState({}); // Map of jobId to job data
+  const [dismissedJobs, setDismissedJobs] = useState(new Set());
 
   useEffect(() => {
     if (!user) {
@@ -44,6 +46,22 @@ export function JobProvider({ children }) {
     });
 
     newSocket.on('job-completed', (data) => {
+        if (data.questions) {
+            saveTest({
+                id: data.testId || `test_${Date.now()}`,
+                name: data.testName || 'AI Extracted Test',
+                questions: data.questions,
+                duration: data.duration || 3 * 3600,
+                pdfUrl: data.pdfUrl,
+                createdAt: Date.now(),
+                completed: false
+            });
+            // Force a small delay then reload so the Dashboard picks up the new test from localStorage
+            setTimeout(() => {
+                window.dispatchEvent(new Event('storage'));
+            }, 500);
+        }
+
         setActiveJobs(prev => ({
             ...prev,
             [data.jobId]: { ...prev[data.jobId], status: 'completed', progress: 100 }
@@ -121,15 +139,15 @@ export function JobProvider({ children }) {
   };
 
   const clearJob = (jobId) => {
-      setActiveJobs(prev => {
-          const copy = { ...prev };
-          delete copy[jobId];
-          return copy;
-      });
+      setDismissedJobs(prev => new Set(prev).add(jobId));
   };
 
+  const visibleActiveJobs = Object.fromEntries(
+      Object.entries(activeJobs).filter(([id]) => !dismissedJobs.has(id))
+  );
+
   return (
-    <JobContext.Provider value={{ activeJobs, uploadPdf, clearJob }}>
+    <JobContext.Provider value={{ activeJobs: visibleActiveJobs, uploadPdf, clearJob }}>
       {children}
     </JobContext.Provider>
   );

@@ -1,8 +1,8 @@
-import { createScopedClient } from '../config/supabase.js';
+import { supabaseAdmin } from '../config/supabase.js';
 
 export const getJobs = async (req, res, next) => {
     try {
-        const supabase = createScopedClient(req.token);
+        const supabase = supabaseAdmin;
         const { data: jobs, error } = await supabase
             .from('jobs')
             .select('*')
@@ -18,7 +18,7 @@ export const getJobs = async (req, res, next) => {
 
 export const getJobStatus = async (req, res, next) => {
     try {
-        const supabase = createScopedClient(req.token);
+        const supabase = supabaseAdmin;
         const { data: job, error } = await supabase
             .from('jobs')
             .select('*')
@@ -38,7 +38,7 @@ export const getJobStatus = async (req, res, next) => {
 
 export const deleteJob = async (req, res, next) => {
     try {
-        const supabase = createScopedClient(req.token);
+        const supabase = supabaseAdmin;
         const { error } = await supabase
             .from('jobs')
             .delete()

@@ -3,10 +3,6 @@ import { DEFAULT_SETTINGS } from '../utils/storage'
 import { useSettings } from '../utils/SettingsContext'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../utils/useAuth'
-import { updateAccessibilitySettings } from '../api/accessibility'
-import { getPerformanceSettings, updatePerformanceSettings } from '../api/performance'
-import { getNotificationSettings, updateNotificationSettings, subscribeToPush } from '../api/notifications'
-import { getAppearanceSettings, updateAppearanceSettings } from '../api/appearance'
 import {
   Key, CheckCircle, ExternalLink, Eye, EyeOff, Target, Bell,
   BookOpen, FileText, Layout, Palette, BarChart2, Accessibility, Shield, Info,
@@ -125,7 +121,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 }
 
 export default function SettingsPage() {
-  const { user, signOut, signIn } = useAuth()
+  const { user, profile: authProfile, updateProfile: _updateProfile, signOut, signIn } = useAuth()
   
   const { settings, updateSetting, updateMultipleSettings } = useSettings()
   const [showKey, setShowKey] = useState(false)
@@ -162,16 +158,14 @@ export default function SettingsPage() {
   const [appearLoading, setAppearLoading] = useState(false)
 
   useEffect(() => {
-    if (user?.id) {
-      Promise.all([
-        getPerformanceSettings(user.id),
-        getNotificationSettings(user.id),
-        getAppearanceSettings(user.id)
-      ]).then(([perfSettings, notifySettings, appearSettings]) => {
-        updateMultipleSettings({ ...perfSettings, ...notifySettings, ...appearSettings });
-      }).catch(err => console.error('Error loading settings', err));
+    if (authProfile) {
+      updateMultipleSettings({ 
+        ...(authProfile.accessibility_settings || {}),
+        ...(authProfile.notification_settings || {}),
+        ...(authProfile.appearance_settings || {})
+      });
     }
-  }, [user?.id]);
+  }, [authProfile]);
 
   const announce = (message) => {
     const liveRegion = document.getElementById('aria-live-region');
@@ -191,7 +185,8 @@ export default function SettingsPage() {
         keyboardNav: key === 'keyboardNav' ? val : settings.keyboardNav,
         screenReader: key === 'screenReader' ? val : settings.screenReader,
       }
-      await updateAccessibilitySettings(user.id, newSettings);
+      const { error } = await _updateProfile({ accessibility_settings: newSettings });
+      if (error) throw error;
       announce(`${key} setting updated successfully.`);
     } catch (err) {
       updateSetting(key, prev[key])
@@ -214,7 +209,8 @@ export default function SettingsPage() {
         perfWeak: key === 'perfWeak' ? val : settings.perfWeak,
         perfRank: key === 'perfRank' ? val : settings.perfRank,
       }
-      await updatePerformanceSettings(user.id, newSettings);
+      const { error } = await _updateProfile({ accessibility_settings: { ...(authProfile?.accessibility_settings || {}), ...newSettings } });
+      if (error) throw error;
       announce(`${key} setting updated successfully.`);
     } catch (err) {
       updateSetting(key, prev[key])
@@ -236,7 +232,8 @@ export default function SettingsPage() {
         compactLayout: key === 'compactLayout' ? val : settings.compactLayout,
         animations: key === 'animations' ? val : settings.animations,
       }
-      await updateAppearanceSettings(user.id, newSettings);
+      const { error } = await _updateProfile({ appearance_settings: newSettings });
+      if (error) throw error;
       announce(`${key} setting updated successfully.`);
     } catch (err) {
       updateSetting(key, prev[key])
@@ -287,7 +284,8 @@ export default function SettingsPage() {
         notifyNewTest: key === 'notifyNewTest' ? val : settings.notifyNewTest,
         notifyResult: key === 'notifyResult' ? val : settings.notifyResult,
       }
-      await updateNotificationSettings(user.id, newSettings);
+      const { error } = await _updateProfile({ notification_settings: newSettings });
+      if (error) throw error;
       announce(`${key} setting updated successfully.`);
     } catch (err) {
       updateSetting(key, prev[key])

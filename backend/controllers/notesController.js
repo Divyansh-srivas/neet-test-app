@@ -1,9 +1,9 @@
-import { createScopedClient } from '../config/supabase.js';
+import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 
 export const getNotes = async (req, res, next) => {
     try {
-        const supabase = createScopedClient(req.token);
+        const supabase = supabaseAdmin;
         const { testId } = req.params;
         const userId = req.user.id;
 
@@ -26,7 +26,7 @@ export const getNotes = async (req, res, next) => {
 
 export const saveNotes = async (req, res, next) => {
     try {
-        const supabase = createScopedClient(req.token);
+        const supabase = supabaseAdmin;
         const { testId } = req.params;
         const userId = req.user.id;
         const { content } = req.body;

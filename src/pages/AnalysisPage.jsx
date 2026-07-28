@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Trophy, Target, Clock, TrendingUp, Bookmark, AlertTriangle } from 'lucide-react'
 import { toggleBookmark, isBookmarked } from '../utils/storage'
-import { getPerformanceSettings, getTestRanking, getUserAnalytics } from '../api/performance'
+import { getTestRanking, getUserAnalytics } from '../api/performance'
 import { useAuth } from '../utils/useAuth'
 
 const card = (style = {}) => ({ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, ...style })
@@ -34,11 +34,18 @@ export default function AnalysisPage({ test, setPage }) {
 
   useEffect(() => {
     if (authProfile?.id && stats) {
-      getPerformanceSettings(authProfile.id).then(setPerfSettings).catch(console.error)
+      const settings = authProfile.accessibility_settings || {};
+      setPerfSettings({
+        perfAccuracy: settings.perfAccuracy ?? true,
+        perfTime: settings.perfTime ?? true,
+        perfSubject: settings.perfSubject ?? true,
+        perfWeak: settings.perfWeak ?? true,
+        perfRank: settings.perfRank ?? false,
+      })
       // Pass the actual test ID. If it's a generated ID starting with "test_", it might not be in DB yet depending on when it was saved.
       // But we will query it anyway.
       getTestRanking(test.id, stats.total.score).then(setRankings).catch(console.error)
-      
+
       // Get historical weak areas
       getUserAnalytics(authProfile.id).then(data => {
         setWeakAreas(data.weakAreas || [])

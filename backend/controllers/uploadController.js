@@ -14,8 +14,8 @@ export const uploadPdf = async (req, res, next) => {
         const userId = req.user.id;
         const token = req.token;
         const { testName, duration } = req.body;
-        const uploadId = `upl_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-        const jobId = `job_${uuidv4()}`;
+        const uploadId = uuidv4();
+        const jobId = uuidv4();
 
         // Ensure uploads directory exists
         const uploadDir = path.resolve('uploads');
@@ -40,6 +40,18 @@ export const uploadPdf = async (req, res, next) => {
         if (storageError) {
             logger.warn(`Failed to upload to Supabase Storage: ${storageError.message}`);
             // Continue processing locally even if storage fails, to ensure robustness
+        }
+        
+        // Satisfy the foreign key constraint by creating an upload record
+        const { error: dbError } = await supabaseAdmin.from('uploads').insert({
+            id: uploadId,
+            user_id: userId,
+            original_name: req.file.originalname || 'upload.pdf',
+            file_path: `${userId}/${uploadId}.pdf`
+        });
+        
+        if (dbError) {
+            logger.warn(`Failed to insert into uploads table: ${dbError.message}`);
         }
 
         // Add to the first queue in the pipeline

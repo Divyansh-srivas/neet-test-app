@@ -1,15 +1,16 @@
 import { Worker } from 'bullmq';
 import { connection } from '../queue/index.js';
-import { createScopedClient, supabaseAdmin } from '../config/supabase.js';
+import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
+import { config } from '../config/env.js';
 
 export const createSaveWorker = (io) => {
     return new Worker('result-saving', async job => {
-        const { jobId, userId, token, questions, testName, duration } = job.data;
-        const supabase = createScopedClient(token);
+        const { jobId, userId, token, storagePath, questions, testName, duration } = job.data;
+        const supabase = supabaseAdmin;
         
         try {
-            await supabase.from('jobs').update({ status: 'Saving Results', progress: 95 }).eq('id', jobId);
+            await supabase.from('jobs').update({ status: 'processing', progress: 95 }).eq('id', jobId);
             io.to(userId).emit('job-progress', { jobId, progress: 95 });
             
             let extractedImagesCount = 0;
@@ -66,7 +67,24 @@ export const createSaveWorker = (io) => {
                 completed_at: new Date().toISOString()
             }).eq('id', jobId);
 
-            io.to(userId).emit('job-completed', { jobId, testId: finalTestId });
+            let pdfUrl = null;
+            if (storagePath) {
+                const { data: signedData, error: signedError } = await supabase.storage.from('uploads').createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+                if (signedData && signedData.signedUrl) {
+                    pdfUrl = signedData.signedUrl;
+                } else {
+                    pdfUrl = `${config.SUPABASE_URL || 'https://rtngewpxtuayymmldmsu.supabase.co'}/storage/v1/object/public/uploads/${storagePath}`;
+                }
+            }
+
+            io.to(userId).emit('job-completed', { 
+                jobId, 
+                testId: finalTestId,
+                testName,
+                duration,
+                questions,
+                pdfUrl
+            });
             logger.info(`Job ${jobId} completed successfully.`);
 
         } catch (error) {

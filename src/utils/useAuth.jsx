@@ -5,6 +5,9 @@ import {
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
+  signInWithEmailAndPassword,
+  updatePassword as firebaseUpdatePassword,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   onAuthStateChanged,
   signOut as firebaseSignOut
 } from 'firebase/auth'
@@ -54,45 +57,67 @@ export function AuthProvider({ children }) {
   }, [])
 
   const fetchProfile = async (userId) => {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    if (!error && data) {
-      setProfile(data)
-      // Hydrate accessibility settings from backend to local storage
-      if (data.accessibility_settings && Object.keys(data.accessibility_settings).length > 0) {
-        import('./storage').then(({ getSettings, saveSettings }) => {
-          const local = getSettings()
-          saveSettings({ ...local, ...data.accessibility_settings })
-        })
+    try {
+      if (!auth.currentUser) { setLoading(false); return; }
+      const token = await auth.currentUser.getIdToken()
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/profile`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setProfile(data)
+        if (data.accessibility_settings && Object.keys(data.accessibility_settings).length > 0) {
+          import('./storage').then(({ getSettings, saveSettings }) => {
+            const local = getSettings()
+            saveSettings({ ...local, ...data.accessibility_settings })
+          })
+        }
       }
+    } catch (e) {
+      console.error(e)
     }
     setLoading(false)
   }
 
   const updateProfile = async (updates) => {
     if (!user) return { data: null, error: { message: 'No user logged in' } }
-    const { data, error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', user.uid)
-      .select()
-      .single()
-    if (!error && data) setProfile(data)
-    return { data, error }
+    
+    // Optimistic update
+    setProfile(prev => ({ ...prev, ...updates }))
+
+    try {
+      const token = await auth.currentUser.getIdToken()
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/profile`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setProfile(data)
+        return { data, error: null }
+      } else {
+        const err = await res.json()
+        return { data: null, error: err }
+      }
+    } catch (error) {
+      return { data: null, error }
+    }
   }
 
   /**
    * STEP 1 — Send a sign-in link to the user's email.
    * Firebase sends a magic link. No OTP code to enter.
    */
-  const sendEmailLink = async (email) => {
+  const sendEmailLink = async (email, fullName = '') => {
     if (!email || !email.trim()) {
       return { data: null, error: { message: 'Email address cannot be empty.' } }
     }
 
     const actionCodeSettings = {
-      // Encode email in the URL so App.jsx can read it even if the link
+      // Encode email and name in the URL so App.jsx can read it even if the link
       // opens in a new tab (sessionStorage is tab-scoped)
-      url: `${window.location.origin}?signinEmail=${encodeURIComponent(email.trim())}`,
+      url: `${window.location.origin}?signinEmail=${encodeURIComponent(email.trim())}&name=${encodeURIComponent(fullName.trim())}`,
       handleCodeInApp: true,
     }
 
@@ -133,24 +158,17 @@ export function AuthProvider({ children }) {
       sessionStorage.removeItem('emailForSignIn')
       sessionStorage.removeItem('emailSignInName')
 
-      // Create or update Supabase profile
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .eq('id', firebaseUser.uid)
-        .single()
-
-      if (!existingProfile) {
-        await supabase.from('profiles').insert({
-          id: firebaseUser.uid,
-          full_name: fullName?.trim() || 'Student',
-          role: 'student'
-        })
-      } else {
-        if (fullName && fullName.trim()) {
-          await supabase.from('profiles').update({ full_name: fullName.trim() }).eq('id', firebaseUser.uid)
-        } else if (!existingProfile.full_name || !existingProfile.full_name.trim()) {
-          await supabase.from('profiles').update({ full_name: 'Student' }).eq('id', firebaseUser.uid)
+      // Send fullName to backend to be upserted via the auth middleware and PUT
+      if (fullName && fullName.trim()) {
+        try {
+          const token = await firebaseUser.getIdToken()
+          await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/profile`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ full_name: fullName.trim() })
+          })
+        } catch (err) {
+          console.error("Error saving name:", err)
         }
       }
 
@@ -168,7 +186,10 @@ export function AuthProvider({ children }) {
       } catch (_) {}
 
       await fetchProfile(firebaseUser.uid)
-      return { data: { user: firebaseUser }, error: null }
+      
+      // Since Magic Link is strictly used for the Sign Up flow for new users,
+      // we ALWAYS want them to set a password after clicking the link.
+      return { data: { user: firebaseUser, needsPassword: true }, error: null }
     } catch (error) {
       console.error('[Firebase Email Link] Complete sign-in failed:', error.code, error.message)
       let msg = 'Sign-in failed. The link may be expired or already used.'
@@ -179,6 +200,60 @@ export function AuthProvider({ children }) {
       else if (error.code === 'auth/invalid-email')
         msg = 'Email mismatch. Please use the same email you signed in with.'
       return { data: null, error: { message: msg } }
+    }
+  }
+
+  const loginWithPassword = async (email, password) => {
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password)
+      
+      // Track session
+      try {
+        const { browser, os, device_name } = getDeviceInfo()
+        const ipRes = await fetch('https://api.ipify.org?format=json').catch(() => null)
+        const ipData = ipRes ? await ipRes.json() : { ip: 'Unknown' }
+        const { data: sessionData } = await supabase.from('user_sessions').insert({
+          user_id: result.user.uid,
+          device_name, browser, os,
+          ip_address: ipData.ip
+        }).select().single()
+        if (sessionData) sessionStorage.setItem('neogravix_session_id', sessionData.id)
+      } catch (_) {}
+
+      await fetchProfile(result.user.uid)
+      return { data: { user: result.user }, error: null }
+    } catch (error) {
+      console.error('[Firebase Password Login] failed:', error)
+      let msg = 'Failed to log in. Please check your credentials.'
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        msg = 'Invalid email or password.'
+      }
+      return { data: null, error: { message: msg } }
+    }
+  }
+
+  const setPassword = async (password) => {
+    if (!auth.currentUser) return { data: null, error: { message: 'Not authenticated.' } }
+    try {
+      await firebaseUpdatePassword(auth.currentUser, password)
+      return { data: true, error: null }
+    } catch (error) {
+      console.error('[Firebase Set Password] failed:', error)
+      let msg = 'Failed to set password.'
+      if (error.code === 'auth/requires-recent-login') {
+        msg = 'For security reasons, please log out and log in again before setting a password.'
+      }
+      return { data: null, error: { message: msg } }
+    }
+  }
+
+  const resetPassword = async (email) => {
+    try {
+      await firebaseSendPasswordResetEmail(auth, email)
+      return { data: true, error: null }
+    } catch (error) {
+      console.error('[Firebase Reset Password] failed:', error)
+      return { data: null, error: { message: 'Failed to send reset email. Make sure the email is registered.' } }
     }
   }
 
@@ -196,7 +271,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, sendEmailLink, completeEmailSignIn, signOut, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, sendEmailLink, completeEmailSignIn, loginWithPassword, setPassword, resetPassword, signOut, updateProfile }}>
       {children}
     </AuthContext.Provider>
   )

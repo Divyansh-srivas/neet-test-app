@@ -22,26 +22,29 @@ Each question MUST have this exact structure:
   "imageBox": { "page": 1, "box": [ymin, xmin, ymax, xmax] }
 }
 CRITICAL INSTRUCTIONS:
-1. Extract EVERY SINGLE QUESTION. Do not skip any questions!
+1. Extract EVERY SINGLE QUESTION. Do not skip any questions! The user is relying on you to extract 100% of the questions. Do not stop early.
 2. Extract the EXACT question number into "qNum".
-3. Extract "imageBox" if the question contains ANY diagram, table, graph, chemical structure, biology figure, or physics diagram. "page" in imageBox is 1-indexed for THIS chunk.`;
+3. Extract "imageBox" if the question contains ANY diagram, table, graph, chemical structure, biology figure, or physics diagram. "page" in imageBox is 1-indexed for THIS chunk.
+4. DEDUCE SUBJECT ACCURATELY: Carefully identify if the question belongs to Physics, Chemistry, or Biology. Pay close attention to the question number. In typical NEET exams, Q1-50 (or Q1-45) are Physics, Q51-100 (or Q46-90) are Chemistry, and Q101-200 (or Q91-180) are Biology. Use this as a strong guide to avoid misclassifying subjects when the text is ambiguous.`;
 
     let success = false;
-    let retries = 3;
+    let retries = 5;
     let response;
     
     while(retries > 0 && !success) {
         try {
             response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-flash-latest',
                 contents: [{ inlineData: { data: pdfBase64, mimeType: 'application/pdf' } }, prompt],
                 config: { responseMimeType: 'application/json' }
             });
             success = true;
         } catch(e) {
-            if (e.status === 429 || e.message?.includes('429')) {
-                logger.warn(`Gemini Rate Limit Hit. Retrying... (${retries} retries left)`);
-                await delay(10000);
+            const isTransientError = e.status === 429 || e.status === 503 || e.status === 500 || e.status === 504 || e.message?.includes('429') || e.message?.includes('503');
+            if (isTransientError) {
+                const backoffDelay = (6 - retries) * 10000; // Exponential-ish backoff: 10s, 20s, 30s...
+                logger.warn(`Gemini API Error (${e.status}). Retrying in ${backoffDelay/1000}s... (${retries - 1} retries left)`);
+                await delay(backoffDelay);
                 retries--;
             } else {
                 throw e;

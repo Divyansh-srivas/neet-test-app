@@ -3,7 +3,7 @@ import { getTests, deleteTest } from '../utils/storage'
 import { useSettings } from '../utils/SettingsContext'
 import { useAuth } from '../utils/useAuth.jsx'
 import { Upload, Play, FileText, Clock, CheckCircle, Trash2, Target } from 'lucide-react'
-import { getPerformanceSettings, getUserAnalytics } from '../api/performance'
+import { getUserAnalytics } from '../api/performance'
 
 export default function Dashboard({ setPage, setActiveTest }) {
   const { profile: authProfile } = useAuth()
@@ -19,7 +19,14 @@ export default function Dashboard({ setPage, setActiveTest }) {
   useEffect(() => {
     setTests(getTests())
     if (authProfile?.id) {
-      getPerformanceSettings(authProfile.id).then(setPerfSettings).catch(console.error)
+      const settings = authProfile.accessibility_settings || {};
+      setPerfSettings({
+        perfAccuracy: settings.perfAccuracy ?? true,
+        perfTime: settings.perfTime ?? true,
+        perfSubject: settings.perfSubject ?? true,
+        perfWeak: settings.perfWeak ?? true,
+        perfRank: settings.perfRank ?? false,
+      })
       getUserAnalytics(authProfile.id).then(setUserAnalytics).catch(console.error)
     }
   }, [authProfile?.id])
@@ -41,12 +48,12 @@ export default function Dashboard({ setPage, setActiveTest }) {
   const handleStart = () => {
     if (!startingTest) return
     const customDuration = (parseInt(customHours) || 0) * 3600 + (parseInt(customMins) || 0) * 60
-    
+
     // Reset for fresh attempt if already completed, or resume if not
     const freshTest = startingTest.completed
       ? { ...startingTest, id: `test_${Date.now()}`, answers: {}, completed: false, startedAt: Date.now(), duration: customDuration }
       : { ...startingTest, startedAt: startingTest.startedAt || Date.now(), duration: customDuration }
-      
+
     setActiveTest(freshTest)
     setPage('pretest')
   }
@@ -67,56 +74,56 @@ export default function Dashboard({ setPage, setActiveTest }) {
             Upload PDFs to generate tests and start your practice
           </p>
         </div>
-          <button onClick={() => setPage('upload')} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: 'white',
-            border: 'none', borderRadius: 12, padding: '12px 22px', cursor: 'pointer',
-            fontWeight: 700, fontSize: 14
-          }}>
-            <Upload size={16} /> Upload PDF
-          </button>
+        <button onClick={() => setPage('upload')} style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: 'white',
+          border: 'none', borderRadius: 12, padding: '12px 22px', cursor: 'pointer',
+          fontWeight: 700, fontSize: 14
+        }}>
+          <Upload size={16} /> Upload PDF
+        </button>
       </div>
 
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
-            <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Questions</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span style={{ fontSize: 32, fontWeight: 700, color: 'var(--text)' }}>
-                {tests.filter(t => t.completed).reduce((acc, t) => acc + (Object.keys(t.answers || {}).length), 0) % (settings.dailyGoal || 50)}
-              </span>
-              <span style={{ fontSize: 16, color: 'var(--muted)' }}>/ {settings.dailyGoal || 50}</span>
-            </div>
-            <div style={{ width: '100%', height: 6, background: 'var(--border)', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, ((tests.filter(t => t.completed).reduce((acc, t) => acc + (Object.keys(t.answers || {}).length), 0) % (settings.dailyGoal || 50)) / (settings.dailyGoal || 50)) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: 3 }} />
-            </div>
+        <div style={{ flex: 1, minWidth: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
+          <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Questions</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 32, fontWeight: 700, color: 'var(--text)' }}>
+              {tests.filter(t => t.completed).reduce((acc, t) => acc + (Object.keys(t.answers || {}).length), 0) % (settings.dailyGoal || 50)}
+            </span>
+            <span style={{ fontSize: 16, color: 'var(--muted)' }}>/ {settings.dailyGoal || 50}</span>
           </div>
-          <div style={{ flex: 1, minWidth: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
-            <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Study Time</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span style={{ fontSize: 32, fontWeight: 700, color: 'var(--text)' }}>
-                {(tests.filter(t => t.completed).reduce((acc, t) => acc + (t.duration || 3600), 0) / 3600 % (settings.dailyTimeGoal || 2)).toFixed(1)}h
-              </span>
-              <span style={{ fontSize: 16, color: 'var(--muted)' }}>/ {settings.dailyTimeGoal || 2}h</span>
-            </div>
-            <div style={{ width: '100%', height: 6, background: 'var(--border)', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, (((tests.filter(t => t.completed).reduce((acc, t) => acc + (t.duration || 3600), 0) / 3600) % (settings.dailyTimeGoal || 2)) / (settings.dailyTimeGoal || 2)) * 100)}%`, height: '100%', background: 'var(--green)', borderRadius: 3 }} />
-            </div>
+          <div style={{ width: '100%', height: 6, background: 'var(--border)', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.min(100, ((tests.filter(t => t.completed).reduce((acc, t) => acc + (Object.keys(t.answers || {}).length), 0) % (settings.dailyGoal || 50)) / (settings.dailyGoal || 50)) * 100)}%`, height: '100%', background: 'var(--accent)', borderRadius: 3 }} />
           </div>
-          {perfSettings?.perfAccuracy && userAnalytics && (
-            <div style={{ flex: 1, minWidth: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
-              <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Overall Accuracy</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 32, fontWeight: 700, color: 'var(--text)' }}>
-                  {userAnalytics.overall.attempted > 0 ? Math.round((userAnalytics.overall.correct / userAnalytics.overall.attempted) * 100) : 0}%
-                </span>
-                <Target size={20} color="var(--accent2)" style={{ transform: 'translateY(2px)' }} />
-              </div>
-              <div style={{ width: '100%', height: 6, background: 'var(--border)', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
-                <div style={{ width: `${userAnalytics.overall.attempted > 0 ? Math.round((userAnalytics.overall.correct / userAnalytics.overall.attempted) * 100) : 0}%`, height: '100%', background: 'var(--accent2)', borderRadius: 3 }} />
-              </div>
-            </div>
-          )}
         </div>
+        <div style={{ flex: 1, minWidth: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
+          <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Study Time</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 32, fontWeight: 700, color: 'var(--text)' }}>
+              {(tests.filter(t => t.completed).reduce((acc, t) => acc + (t.duration || 3600), 0) / 3600 % (settings.dailyTimeGoal || 2)).toFixed(1)}h
+            </span>
+            <span style={{ fontSize: 16, color: 'var(--muted)' }}>/ {settings.dailyTimeGoal || 2}h</span>
+          </div>
+          <div style={{ width: '100%', height: 6, background: 'var(--border)', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.min(100, (((tests.filter(t => t.completed).reduce((acc, t) => acc + (t.duration || 3600), 0) / 3600) % (settings.dailyTimeGoal || 2)) / (settings.dailyTimeGoal || 2)) * 100)}%`, height: '100%', background: 'var(--green)', borderRadius: 3 }} />
+          </div>
+        </div>
+        {perfSettings?.perfAccuracy && userAnalytics && (
+          <div style={{ flex: 1, minWidth: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
+            <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Overall Accuracy</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 32, fontWeight: 700, color: 'var(--text)' }}>
+                {userAnalytics.overall.attempted > 0 ? Math.round((userAnalytics.overall.correct / userAnalytics.overall.attempted) * 100) : 0}%
+              </span>
+              <Target size={20} color="var(--accent2)" style={{ transform: 'translateY(2px)' }} />
+            </div>
+            <div style={{ width: '100%', height: 6, background: 'var(--border)', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
+              <div style={{ width: `${userAnalytics.overall.attempted > 0 ? Math.round((userAnalytics.overall.correct / userAnalytics.overall.attempted) * 100) : 0}%`, height: '100%', background: 'var(--accent2)', borderRadius: 3 }} />
+            </div>
+          </div>
+        )}
+      </div>
 
       {tests.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }}>
@@ -149,7 +156,7 @@ export default function Dashboard({ setPage, setActiveTest }) {
                     <span>{qCount} Questions</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Clock size={13} />
-                      {test.duration ? `${Math.floor(test.duration/3600)}h ${Math.floor((test.duration%3600)/60)}m` : '3h 0m'}
+                      {test.duration ? `${Math.floor(test.duration / 3600)}h ${Math.floor((test.duration % 3600) / 60)}m` : '3h 0m'}
                     </span>
                     {test.completed && (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--green)' }}>
@@ -159,27 +166,27 @@ export default function Dashboard({ setPage, setActiveTest }) {
                   </div>
                 </div>
 
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    {test.completed && (
-                      <button onClick={() => handleViewResult(test)} style={{
-                        padding: '10px 16px', borderRadius: 10, border: '1px solid var(--border)',
-                        background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontWeight: 600, fontSize: 13
-                      }}>View Result</button>
-                    )}
-                    <button onClick={() => initiateStart(test)} style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '10px 18px', borderRadius: 10, border: 'none',
-                      background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: 'white',
-                      cursor: 'pointer', fontWeight: 700, fontSize: 13
-                    }}>
-                      <Play size={14} /> {test.completed ? 'Retake' : 'Start Test'}
-                    </button>
-                    <button onClick={() => handleDeleteTest(test.id)} title="Delete test" style={{
-                      background: 'transparent', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8
-                    }}>
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  {test.completed && (
+                    <button onClick={() => handleViewResult(test)} style={{
+                      padding: '10px 16px', borderRadius: 10, border: '1px solid var(--border)',
+                      background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontWeight: 600, fontSize: 13
+                    }}>View Result</button>
+                  )}
+                  <button onClick={() => initiateStart(test)} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '10px 18px', borderRadius: 10, border: 'none',
+                    background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: 'white',
+                    cursor: 'pointer', fontWeight: 700, fontSize: 13
+                  }}>
+                    <Play size={14} /> {test.completed ? 'Retake' : 'Start Test'}
+                  </button>
+                  <button onClick={() => handleDeleteTest(test.id)} title="Delete test" style={{
+                    background: 'transparent', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8
+                  }}>
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
             )
           })}
@@ -195,7 +202,7 @@ export default function Dashboard({ setPage, setActiveTest }) {
             <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 24 }}>
               Customize how much time you want to allow yourself for this attempt.
             </p>
-            
+
             <div style={{ display: 'flex', gap: 12, marginBottom: 24, textAlign: 'left' }}>
               <div style={{ flex: 1 }}>
                 <label style={{ fontSize: 13, color: '#94a3b8', display: 'block', marginBottom: 6 }}>Hours</label>

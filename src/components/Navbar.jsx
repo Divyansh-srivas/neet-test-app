@@ -1,5 +1,5 @@
 import React from 'react'
-import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle } from 'lucide-react'
 import logoImg from '../assets/logo.jpg'
 
 
@@ -47,6 +47,16 @@ export default function Navbar({ page, setPage }) {
             </button>
           ))}
         </nav>
+
+        <div style={{ padding: '0 12px' }}>
+          <a href="mailto:Neogravix@gmail.com?subject=Support%20Request%3A%20Neogravix&body=Please%20describe%20your%20issue%20below%3A%0A%0A" style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', borderRadius: 10,
+            textDecoration: 'none', color: '#93c5fd', background: 'rgba(59,130,246,0.1)',
+            fontWeight: 500, fontSize: 14, border: '1px solid rgba(59,130,246,0.2)'
+          }}>
+            <HelpCircle size={17} /> Help & Support
+          </a>
+        </div>
       </aside>
 
       {/* Mobile Bottom Nav */}

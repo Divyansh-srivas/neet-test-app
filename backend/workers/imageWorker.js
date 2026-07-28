@@ -1,15 +1,15 @@
 import { Worker } from 'bullmq';
 import { connection, queues } from '../queue/index.js';
-import { createScopedClient } from '../config/supabase.js';
+import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 
 export const createImageWorker = (io) => {
     return new Worker('image-extraction', async job => {
-        const { jobId, userId, filePath, token, questions, testName, duration } = job.data;
-        const supabase = createScopedClient(token);
+        const { jobId, userId, filePath, storagePath, token, questions, testName, duration } = job.data;
+        const supabase = supabaseAdmin;
         
         try {
-            await supabase.from('jobs').update({ status: 'Extracting Images', progress: 75 }).eq('id', jobId);
+            await supabase.from('jobs').update({ status: 'processing', progress: 75 }).eq('id', jobId);
             io.to(userId).emit('job-progress', { jobId, progress: 75 });
             
             // Simulating image extraction logic for this architecture. 
@@ -17,7 +17,7 @@ export const createImageWorker = (io) => {
             // For now, we pass the questions along to the processor.
             
             await queues.questionProcessing.add('process-questions', {
-                jobId, userId, token, questions, testName, duration
+                jobId, userId, token, storagePath, questions, testName, duration
             });
 
         } catch (error) {

@@ -1,60 +1,6 @@
 import { supabase } from '../utils/supabaseClient'
 
 /**
- * Get performance settings from the backend.
- * We store this in the accessibility_settings jsonb column to avoid requiring DB migrations.
- */
-export const getPerformanceSettings = async (userId) => {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('accessibility_settings')
-    .eq('id', userId)
-    .single()
-  
-  if (error) throw error;
-  
-  const settings = data?.accessibility_settings || {};
-  return {
-    perfAccuracy: settings.perfAccuracy ?? true,
-    perfTime: settings.perfTime ?? true,
-    perfSubject: settings.perfSubject ?? true,
-    perfWeak: settings.perfWeak ?? true,
-    perfRank: settings.perfRank ?? false,
-  };
-}
-
-/**
- * Update performance settings in the backend.
- */
-export const updatePerformanceSettings = async (userId, newPerfSettings) => {
-  // First get current settings to merge
-  const { data: currData } = await supabase
-    .from('profiles')
-    .select('accessibility_settings')
-    .eq('id', userId)
-    .single()
-    
-  const current = currData?.accessibility_settings || {};
-  const merged = { ...current, ...newPerfSettings };
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ accessibility_settings: merged })
-    .eq('id', userId)
-    .select('accessibility_settings')
-    .single()
-    
-  if (error) throw error;
-  return {
-    perfAccuracy: data.accessibility_settings.perfAccuracy ?? true,
-    perfTime: data.accessibility_settings.perfTime ?? true,
-    perfSubject: data.accessibility_settings.perfSubject ?? true,
-    perfWeak: data.accessibility_settings.perfWeak ?? true,
-    perfRank: data.accessibility_settings.perfRank ?? false,
-  };
-}
-
-/**
  * Get overall analytics for a user based on all completed attempts
  */
 export const getUserAnalytics = async (userId) => {

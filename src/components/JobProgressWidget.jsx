@@ -2,7 +2,7 @@ import React from 'react';
 import { useJob } from '../utils/JobContext';
 import { Loader, CheckCircle, XCircle, FileText, ChevronRight } from 'lucide-react';
 
-export default function JobProgressWidget() {
+export default function JobProgressWidget({ setPage }) {
     const { activeJobs, clearJob } = useJob();
     
     const jobs = Object.entries(activeJobs);
@@ -43,14 +43,12 @@ export default function JobProgressWidget() {
                                     {isProcessing ? 'AI Extracting Questions...' : isCompleted ? 'Test Ready' : 'Extraction Failed'}
                                 </span>
                             </div>
-                            {!isProcessing && (
                                 <button 
                                     onClick={() => clearJob(jobId)} 
                                     style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 12 }}
                                 >
                                     Dismiss
                                 </button>
-                            )}
                         </div>
 
                         {isProcessing && (
@@ -75,7 +73,12 @@ export default function JobProgressWidget() {
                         )}
 
                         {isCompleted && (
-                            <button style={{
+                            <button 
+                                onClick={() => {
+                                    clearJob(jobId);
+                                    if (setPage) setPage('dashboard');
+                                }}
+                                style={{
                                 width: '100%', padding: '10px', background: 'color-mix(in srgb, var(--green) 15%, transparent)',
                                 color: 'var(--green)', border: '1px solid color-mix(in srgb, var(--green) 30%, transparent)',
                                 borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',

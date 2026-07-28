@@ -9,6 +9,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <div id="error-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; padding: 20px; z-index: 9999; overflow: auto; font-family: monospace;">
+      <h2 style="color: red;">Runtime Error</h2>
+      <pre id="error-message" style="white-space: pre-wrap;"></pre>
+    </div>
+    <script>
+      window.addEventListener('error', function(e) {
+        document.getElementById('error-overlay').style.display = 'block';
+        document.getElementById('error-message').innerText = e.error ? e.error.stack : e.message;
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        document.getElementById('error-overlay').style.display = 'block';
+        document.getElementById('error-message').innerText = e.reason ? (e.reason.stack || e.reason) : 'Unhandled Rejection';
+      });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

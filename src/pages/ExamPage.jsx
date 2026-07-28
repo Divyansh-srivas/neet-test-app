@@ -6,6 +6,8 @@ import NotesPad from '../components/NotesPad'
 import { useAuth } from '../utils/useAuth'
 import { createNotification } from '../api/notifications'
 import { startTestAttempt, saveAttemptState, submitAttempt, recordViolation } from '../api/exam'
+import PdfImageCropper from '../components/PdfImageCropper'
+import CalculatorWidget from '../components/Calculator'
 
 const TOTAL_SECONDS = 3 * 60 * 60
 
@@ -472,18 +474,10 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
       
       {/* Calculator Widget */}
       {showCalc && (
-        <div style={{ position: 'fixed', bottom: 20, left: settings.palettePosition === 'Left' ? 320 : 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, zIndex: 90, width: 220, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>Calculator</span>
-            <button onClick={() => setShowCalc(false)} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer' }}><X size={16} /></button>
-          </div>
-          <div style={{ background: 'var(--bg)', padding: 10, borderRadius: 8, color: 'white', textAlign: 'right', marginBottom: 10, fontFamily: 'monospace', fontSize: 18 }}>0.00</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-            {['7','8','9','/','4','5','6','*','1','2','3','-','C','0','.','+'].map(c => (
-              <button key={c} style={{ background: 'var(--surface2)', border: 'none', borderRadius: 6, padding: '10px 0', color: 'white', cursor: 'pointer', fontWeight: 600 }}>{c}</button>
-            ))}
-          </div>
-        </div>
+        <CalculatorWidget 
+            onClose={() => setShowCalc(false)} 
+            position={settings.palettePosition} 
+        />
       )}
 
       {/* Main Area */}
@@ -597,6 +591,15 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
                   <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(0,0,0,0.6)', color: 'white', padding: '4px 8px', borderRadius: 6, fontSize: 11, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <ZoomIn size={14} /> Click to zoom
                   </div>
+                </div>
+              )}
+              {q.imageBox && test.pdfUrl && (
+                <div style={{ marginTop: 20, textAlign: 'center' }}>
+                    <PdfImageCropper 
+                        pdfUrl={test.pdfUrl} 
+                        pageNum={q.imageBox.page} 
+                        box={q.imageBox.box} 
+                    />
                 </div>
               )}
             </div>
