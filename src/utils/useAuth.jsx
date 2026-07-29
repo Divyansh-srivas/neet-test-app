@@ -81,7 +81,7 @@ export function AuthProvider({ children }) {
 
   const updateProfile = async (updates) => {
     if (!user) return { data: null, error: { message: 'No user logged in' } }
-    
+
     // Optimistic update
     setProfile(prev => ({ ...prev, ...updates }))
 
@@ -183,10 +183,10 @@ export function AuthProvider({ children }) {
           ip_address: ipData.ip
         }).select().single()
         if (sessionData) sessionStorage.setItem('neogravix_session_id', sessionData.id)
-      } catch (_) {}
+      } catch (_) { }
 
       await fetchProfile(firebaseUser.uid)
-      
+
       // Since Magic Link is strictly used for the Sign Up flow for new users,
       // we ALWAYS want them to set a password after clicking the link.
       return { data: { user: firebaseUser, needsPassword: true }, error: null }
@@ -206,7 +206,7 @@ export function AuthProvider({ children }) {
   const loginWithPassword = async (email, password) => {
     try {
       const result = await signInWithEmailAndPassword(auth, email, password)
-      
+
       // Track session
       try {
         const { browser, os, device_name } = getDeviceInfo()
@@ -218,7 +218,7 @@ export function AuthProvider({ children }) {
           ip_address: ipData.ip
         }).select().single()
         if (sessionData) sessionStorage.setItem('neogravix_session_id', sessionData.id)
-      } catch (_) {}
+      } catch (_) { }
 
       await fetchProfile(result.user.uid)
       return { data: { user: result.user }, error: null }
@@ -264,7 +264,7 @@ export function AuthProvider({ children }) {
         await supabase.from('user_sessions').delete().eq('id', sessionId)
         sessionStorage.removeItem('neogravix_session_id')
       }
-    } catch (_) {}
+    } catch (_) { }
     await firebaseSignOut(auth)
     setUser(null)
     setProfile(null)
