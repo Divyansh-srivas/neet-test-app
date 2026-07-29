@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import fs from 'fs';
 import { authenticate } from '../middlewares/auth.js';
 import { apiLimiter, uploadLimiter } from '../middlewares/rateLimiter.js';
 import { uploadPdf } from '../controllers/uploadController.js';
@@ -9,8 +10,14 @@ import { getProfile, updateProfile } from '../controllers/profileController.js';
 
 const router = express.Router();
 
+// Ensure uploads directory exists (crucial for Render production)
+const uploadDir = 'uploads/';
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const upload = multer({ 
-    dest: 'uploads/',
+    dest: uploadDir,
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'application/pdf') cb(null, true);
