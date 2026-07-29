@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { saveTest } from '../utils/storage'
 import { useSettings } from '../utils/SettingsContext'
-import { Clock, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, AlertTriangle, Menu, X, Check, ChevronsRight, ChevronsLeft, Calculator, ZoomIn, Edit3 } from 'lucide-react'
+import { Clock, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, AlertTriangle, Menu, X, Check, ChevronsRight, ChevronsLeft, ZoomIn, Edit3 } from 'lucide-react'
 import NotesPad from '../components/NotesPad'
 import { useAuth } from '../utils/useAuth'
 import { createNotification } from '../api/notifications'
 import { startTestAttempt, saveAttemptState, submitAttempt, recordViolation } from '../api/exam'
 import PdfImageCropper from '../components/PdfImageCropper'
-import CalculatorWidget from '../components/Calculator'
+
 
 const TOTAL_SECONDS = 3 * 60 * 60
 
@@ -24,7 +24,6 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
   const [timeLeft, setTimeLeft] = useState(totalSeconds)
   
   const [showSubmit, setShowSubmit] = useState(false)
-  const [showCalc, setShowCalc] = useState(settings.defaultCalculator)
   
   const questions = test.questions || []
   
@@ -472,13 +471,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
   return (
     <div style={{ display: 'flex', gap: 0, minHeight: '100vh', position: 'relative', flexDirection: settings.palettePosition === 'Left' ? 'row-reverse' : 'row' }}>
       
-      {/* Calculator Widget */}
-      {showCalc && (
-        <CalculatorWidget 
-            onClose={() => setShowCalc(false)} 
-            position={settings.palettePosition} 
-        />
-      )}
+
 
       {/* Main Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', paddingBottom: 60, pointerEvents: showViolationWarning ? 'none' : 'auto', filter: showViolationWarning ? 'blur(4px)' : 'none' }}>
@@ -519,9 +512,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
               <Edit3 size={18} color={showNotes ? 'var(--accent)' : '#94a3b8'} />
             </button>
 
-            <button onClick={() => setShowCalc(p => !p)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', marginRight: 16 }}>
-              <Calculator size={18} color={showCalc ? 'var(--accent)' : '#94a3b8'} />
-            </button>
+
 
             {settings.showRemaining && (
               <div style={{ fontSize: 13, color: 'var(--muted)', marginRight: 16, fontWeight: 600 }} className="hide-on-mobile">

@@ -514,9 +514,7 @@ export default function SettingsPage() {
           <SettingRow title="Enable Keyboard Shortcuts" desc="Use arrows to navigate and A/B/C/D to answer">
             <Toggle checked={settings.enableShortcuts} onChange={update('enableShortcuts')} />
           </SettingRow>
-          <SettingRow title="Default Calculator" desc="Enable on-screen calculator by default">
-            <Toggle checked={settings.defaultCalculator} onChange={update('defaultCalculator')} />
-          </SettingRow>
+
         </SectionCard>
 
         {/* 3. Question Palette */}
