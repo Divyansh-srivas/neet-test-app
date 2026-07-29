@@ -18,7 +18,7 @@ const server = http.createServer(app);
 const io = initSocket(server);
 
 // Security Middlewares
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({ origin: '*' }));
 
 // Optimization & Logging
