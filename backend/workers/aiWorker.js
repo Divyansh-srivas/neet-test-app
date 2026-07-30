@@ -25,7 +25,7 @@ export const createAiWorker = (io) => {
             let extractedCount = 0;
             let allExtractedRaw = [];
             
-            const CONCURRENCY_LIMIT = 1; // Process 1 chunk at a time to strictly enforce rate limits
+            const CONCURRENCY_LIMIT = 3; // Paid tier allows higher concurrency
             
             for (let i = 0; i < chunkTasks.length; i += CONCURRENCY_LIMIT) {
                 const batch = chunkTasks.slice(i, i + CONCURRENCY_LIMIT);
@@ -61,12 +61,6 @@ export const createAiWorker = (io) => {
                 }));
                 
                 allExtractedRaw.push(...batchResults.flat());
-                
-                // Add mandatory delay to respect Gemini Free API limit (15 Requests Per Minute)
-                // We pause for 4.5 seconds between each chunk
-                if (i + CONCURRENCY_LIMIT < chunkTasks.length) {
-                    await new Promise(resolve => setTimeout(resolve, 4500));
-                }
             }
             
             // allExtractedRaw is already populated
