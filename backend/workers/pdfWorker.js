@@ -43,6 +43,7 @@ export const createPdfWorker = (io) => {
         } catch (error) {
             logger.error(`PDF Worker failed: ${error.message}`);
             io.to(userId).emit('job-failed', { jobId: job.id, error: error.message });
+            await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', job.id);
             throw error;
         }
     }, { connection });
