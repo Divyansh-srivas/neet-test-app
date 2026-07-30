@@ -40,12 +40,16 @@ CRITICAL INSTRUCTIONS:
             });
             success = true;
         } catch(e) {
-            const isTransientError = e.status === 429 || e.status === 503 || e.status === 500 || e.status === 504 || e.message?.includes('429') || e.message?.includes('503');
+            const isQuotaError = e.message?.toLowerCase().includes('depleted') || e.message?.toLowerCase().includes('quota');
+            const isTransientError = !isQuotaError && (e.status === 429 || e.status === 503 || e.status === 500 || e.status === 504 || e.message?.includes('429') || e.message?.includes('503'));
+            
             if (isTransientError) {
                 const backoffDelay = (9 - retries) * 8000; // 8s, 16s, 24s...
                 logger.warn(`Gemini API Error (${e.status}). Retrying in ${backoffDelay/1000}s... (${retries - 1} retries left)`);
                 await delay(backoffDelay);
                 retries--;
+            } else if (isQuotaError) {
+                throw new Error('Google Gemini API Error: Your prepayment credits are depleted. Please check billing at aistudio.google.com.');
             } else {
                 throw e;
             }
