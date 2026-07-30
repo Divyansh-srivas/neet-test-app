@@ -28,7 +28,7 @@ CRITICAL INSTRUCTIONS:
 4. DEDUCE SUBJECT ACCURATELY: Carefully identify if the question belongs to Physics, Chemistry, or Biology. Pay close attention to the question number. In typical NEET exams, Q1-50 (or Q1-45) are Physics, Q51-100 (or Q46-90) are Chemistry, and Q101-200 (or Q91-180) are Biology. Use this as a strong guide to avoid misclassifying subjects when the text is ambiguous.`;
 
     let success = false;
-    let retries = 5;
+    let retries = 8;
     let response;
     
     while(retries > 0 && !success) {
@@ -42,7 +42,7 @@ CRITICAL INSTRUCTIONS:
         } catch(e) {
             const isTransientError = e.status === 429 || e.status === 503 || e.status === 500 || e.status === 504 || e.message?.includes('429') || e.message?.includes('503');
             if (isTransientError) {
-                const backoffDelay = (6 - retries) * 10000; // Exponential-ish backoff: 10s, 20s, 30s...
+                const backoffDelay = (9 - retries) * 8000; // 8s, 16s, 24s...
                 logger.warn(`Gemini API Error (${e.status}). Retrying in ${backoffDelay/1000}s... (${retries - 1} retries left)`);
                 await delay(backoffDelay);
                 retries--;

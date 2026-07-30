@@ -61,6 +61,12 @@ export const createAiWorker = (io) => {
                 }));
                 
                 allExtractedRaw.push(...batchResults.flat());
+                
+                // Add mandatory delay to respect Gemini Free API limit (15 Requests Per Minute)
+                // We pause for 4.5 seconds between each chunk
+                if (i + CONCURRENCY_LIMIT < chunkTasks.length) {
+                    await new Promise(resolve => setTimeout(resolve, 4500));
+                }
             }
             
             // allExtractedRaw is already populated
