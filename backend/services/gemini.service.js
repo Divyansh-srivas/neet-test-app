@@ -40,7 +40,7 @@ CRITICAL INSTRUCTIONS:
             });
             success = true;
         } catch(e) {
-            const isQuotaError = e.message?.toLowerCase().includes('depleted') || e.message?.toLowerCase().includes('quota');
+            const isQuotaError = e.message?.toLowerCase().includes('depleted') || e.message?.toLowerCase().includes('billing');
             const isTransientError = !isQuotaError && (e.status === 429 || e.status === 503 || e.status === 500 || e.status === 504 || e.message?.includes('429') || e.message?.includes('503'));
             
             if (isTransientError) {

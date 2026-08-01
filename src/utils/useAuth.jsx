@@ -137,6 +137,8 @@ export function AuthProvider({ children }) {
         msg = 'Email link sign-in is not enabled. Please enable it in Firebase Console → Authentication → Sign-in methods.'
       else if (error.code === 'auth/unauthorized-domain')
         msg = 'This domain is not authorized. Add it in Firebase Console → Authentication → Settings → Authorized domains.'
+      else
+        msg = `Failed to send sign-in link: ${error.message} (${error.code})`;
       return { data: null, error: { message: msg } }
     }
   }
