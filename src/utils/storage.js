@@ -110,9 +110,6 @@ export const DEFAULT_SETTINGS = {
 export const getSettings = () => {
   const local = storage.get(KEYS.SETTINGS) || {}
   const merged = { ...DEFAULT_SETTINGS, ...local }
-  if (!merged.geminiKey && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
-    merged.geminiKey = import.meta.env.VITE_GEMINI_API_KEY
-  }
   return merged
 }
 export const saveSettings = (s) => {
