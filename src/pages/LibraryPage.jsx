@@ -52,7 +52,7 @@ export default function LibraryPage() {
             </span>
           </h2>
           <p style={{ color: '#9ca3af', fontSize: '16px', lineHeight: 1.625 }}>
-            Upload your Allen, Aakash, or local coaching modules. Our core engine instantly parses questions, diagrams, and options into a strict NTA-style CBT environment.
+            Upload your coaching modules from any institute. Our core engine instantly parses questions, diagrams, and options into a strict NTA-style CBT environment.
           </p>
         </motion.div>
 
