@@ -118,7 +118,7 @@ export default function LibraryPage() {
             >
               <div style={{ width: '144px', height: '144px', borderRadius: '50%', backgroundColor: 'rgba(23, 37, 84, 0.4)', border: '1px solid rgba(96, 165, 250, 0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)', position: 'relative' }}>
                 <Clock style={{ width: '36px', height: '36px', color: '#60a5fa', marginBottom: '4px' }} />
-                <span style={{ fontFamily: 'monospace', fontSize: '20px', fontWeight: 700, letterSpacing: '0.05em', color: 'white' }}>03:20:00</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '20px', fontWeight: 700, letterSpacing: '0.05em', color: 'white' }}>03:00:00</span>
                 <span style={{ fontSize: '10px', color: 'rgba(147, 197, 253, 0.8)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>NTA Standard</span>
               </div>
             </motion.div>
