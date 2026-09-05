@@ -3,6 +3,7 @@ import { useAuth } from '../utils/useAuth.jsx'
 import { Mail, User, GraduationCap, BookOpen, X, Sparkles, ArrowRight, Send, CheckCircle, RotateCcw, Lock, KeyRound, Eye, EyeOff, HelpCircle } from 'lucide-react'
 import bgImage from '../assets/bg.jpg'
 import logoImg from '../assets/logo.jpg'
+import LibraryPage from './LibraryPage.jsx'
 
 export default function AuthPage({ forceSetPassword }) {
   const { user, sendEmailLink, loginWithPassword, setPassword, resetPassword } = useAuth()
@@ -184,11 +185,12 @@ export default function AuthPage({ forceSetPassword }) {
   }
 
   return (
-    <div style={layoutStyle}>
-      <div style={overlayStyle} />
+    <div style={{ width: '100%', overflowX: 'hidden' }}>
+      <div style={heroSectionStyle}>
+        <div style={overlayStyle} />
 
-      {/* 2-Column Split Layout */}
-      <div style={{
+        {/* 2-Column Split Layout */}
+        <div style={{
         display: 'flex',
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -446,6 +448,8 @@ export default function AuthPage({ forceSetPassword }) {
         </div>
       </div>
 
+      <LibraryPage />
+
       <a href="mailto:Neogravix@gmail.com?subject=Support%20Request%3A%20Neogravix&body=Please%20describe%20your%20issue%20below%3A%0A%0A" 
          style={{ position: 'fixed', bottom: 30, right: 30, zIndex: 105, display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 100, color: '#e0e7ff', textDecoration: 'none', fontWeight: 500, fontSize: 14, backdropFilter: 'blur(10px)', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
         <HelpCircle size={18} color="#818cf8" /> Help & Support
@@ -454,7 +458,7 @@ export default function AuthPage({ forceSetPassword }) {
   )
 }
 
-const layoutStyle = { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed', position: 'relative', overflow: 'hidden' }
+const heroSectionStyle = { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed', position: 'relative' }
 const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, height: '100vh', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', pointerEvents: 'none', zIndex: 1 }
 const outlineBtnStyle = { padding: '12px 28px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer', transition: 'all 0.3s' }
 const primaryBtnStyle = { padding: '14px 28px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #4f46e5, #3b82f6)', color: 'white', fontWeight: 600, fontSize: 15, transition: 'all 0.3s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 8px 24px -8px rgba(79, 70, 229, 0.6)' }
