@@ -447,6 +447,7 @@ export default function AuthPage({ forceSetPassword }) {
             )}
           </div>
         </div>
+        </div>
 
         {/* Bouncing Scroll Indicator */}
         <motion.div 
