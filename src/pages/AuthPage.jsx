@@ -473,7 +473,7 @@ export default function AuthPage({ forceSetPassword }) {
 }
 
 const heroSectionStyle = { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed', position: 'relative' }
-const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, height: '100vh', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', pointerEvents: 'none', zIndex: 1 }
+const overlayStyle = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', pointerEvents: 'none', zIndex: 1 }
 const outlineBtnStyle = { padding: '12px 28px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer', transition: 'all 0.3s' }
 const primaryBtnStyle = { padding: '14px 28px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #4f46e5, #3b82f6)', color: 'white', fontWeight: 600, fontSize: 15, transition: 'all 0.3s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 8px 24px -8px rgba(79, 70, 229, 0.6)' }
 const featurePillStyle = { display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', padding: '10px 18px', borderRadius: 100, backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', fontSize: 14 }
