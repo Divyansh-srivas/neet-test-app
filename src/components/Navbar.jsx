@@ -1,5 +1,5 @@
 import React from 'react'
-import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle, Library } from 'lucide-react'
 import logoImg from '../assets/logo.jpg'
 
 
@@ -8,6 +8,7 @@ export default function Navbar({ page, setPage }) {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'upload', label: 'New Test', icon: BookOpen },
     { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
+    { id: 'library', label: 'Library', icon: Library },
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]

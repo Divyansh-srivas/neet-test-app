@@ -11,6 +11,7 @@ import PreTestPage from './pages/PreTestPage'
 import ExamPage from './pages/ExamPage'
 import AnalysisPage from './pages/AnalysisPage'
 import BookmarksPage from './pages/BookmarksPage'
+import LibraryPage from './pages/LibraryPage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import { LogOut } from 'lucide-react'
@@ -159,6 +160,7 @@ function AppContent() {
         {page === 'exam' && activeTest && <ExamPage test={activeTest} setPage={setPage} setActiveTest={setActiveTest} />}
         {page === 'analysis' && activeTest && <AnalysisPage test={activeTest} setPage={setPage} />}
         {page === 'bookmarks' && <BookmarksPage />}
+        {page === 'library' && <LibraryPage />}
         {page === 'profile' && <ProfilePage />}
         {page === 'settings' && <SettingsPage />}
 
