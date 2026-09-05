@@ -47,6 +47,7 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser || null)
       if (firebaseUser) {
+        setLoading(false) // Render app immediately
         await fetchProfile(firebaseUser.uid)
       } else {
         setProfile(null)
