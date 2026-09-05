@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../utils/useAuth.jsx'
-import { Mail, User, GraduationCap, BookOpen, X, Sparkles, ArrowRight, Send, CheckCircle, RotateCcw, Lock, KeyRound, Eye, EyeOff, HelpCircle } from 'lucide-react'
+import { Mail, User, GraduationCap, BookOpen, X, Sparkles, ArrowRight, Send, CheckCircle, RotateCcw, Lock, KeyRound, Eye, EyeOff, HelpCircle, ChevronDown } from 'lucide-react'
+import { motion } from 'framer-motion'
 import bgImage from '../assets/bg.jpg'
 import logoImg from '../assets/logo.jpg'
 import LibraryPage from './LibraryPage.jsx'
@@ -446,9 +447,22 @@ export default function AuthPage({ forceSetPassword }) {
             )}
           </div>
         </div>
+
+        {/* Bouncing Scroll Indicator */}
+        <motion.div 
+          animate={{ y: [0, 10, 0] }} 
+          transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+          style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', zIndex: 20 }}
+          onClick={() => window.scrollTo({ top: window.innerHeight, behavior: 'smooth' })}
+        >
+          <ChevronDown size={32} />
+        </motion.div>
       </div>
 
-      <LibraryPage />
+      {/* Subtle Divider before Bento Grid */}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+        <LibraryPage />
+      </div>
 
       <a href="mailto:Neogravix@gmail.com?subject=Support%20Request%3A%20Neogravix&body=Please%20describe%20your%20issue%20below%3A%0A%0A" 
          style={{ position: 'fixed', bottom: 30, right: 30, zIndex: 105, display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 100, color: '#e0e7ff', textDecoration: 'none', fontWeight: 500, fontSize: 14, backdropFilter: 'blur(10px)', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
