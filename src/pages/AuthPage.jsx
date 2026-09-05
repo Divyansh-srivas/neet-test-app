@@ -4,7 +4,7 @@ import { Mail, User, GraduationCap, BookOpen, X, Sparkles, ArrowRight, Send, Che
 import { motion } from 'framer-motion'
 import bgImage from '../assets/bg.jpg'
 import logoImg from '../assets/logo.jpg'
-import LibraryPage from './LibraryPage.jsx'
+import FeaturesBento from '../components/FeaturesBento.jsx'
 
 export default function AuthPage({ forceSetPassword }) {
   const { user, sendEmailLink, loginWithPassword, setPassword, resetPassword } = useAuth()
@@ -462,7 +462,7 @@ export default function AuthPage({ forceSetPassword }) {
 
       {/* Subtle Divider before Bento Grid */}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
-        <LibraryPage />
+        <FeaturesBento />
       </div>
 
       <a href="mailto:Neogravix@gmail.com?subject=Support%20Request%3A%20Neogravix&body=Please%20describe%20your%20issue%20below%3A%0A%0A" 
