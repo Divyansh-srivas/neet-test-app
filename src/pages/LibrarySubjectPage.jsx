@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, BookOpen, ExternalLink, Loader2, X, Maximize2 } from 'lucide-react';
-import { fetchAPI } from '../api/apiClient';
+import React, { useState } from 'react';
+import { ArrowLeft, BookOpen, Loader2, X, Maximize2 } from 'lucide-react';
+import libraryData from '../data/libraryData';
 
 export default function LibrarySubjectPage({ subject, onBack }) {
-  const [materials, setMaterials] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selectedPdf, setSelectedPdf] = useState(null);
 
   // Styling maps based on subject
@@ -16,20 +14,8 @@ export default function LibrarySubjectPage({ subject, onBack }) {
 
   const theme = subjectThemes[subject.toLowerCase()] || subjectThemes.physics;
 
-  useEffect(() => {
-    const fetchMaterials = async () => {
-      try {
-        const response = await fetchAPI(`/api/library/${subject}`);
-        const data = await response.json();
-        setMaterials(data.materials || []);
-      } catch (error) {
-        console.error('Failed to fetch materials:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchMaterials();
-  }, [subject]);
+  // Get chapters directly from code
+  const materials = (libraryData[subject.toLowerCase()] || []).filter(item => item.pdf_link);
 
   return (
     <div style={{ position: 'relative', minHeight: 'calc(100vh - 80px)', width: '100%', padding: '48px 24px', color: 'white', overflow: 'hidden' }}>
@@ -59,11 +45,7 @@ export default function LibrarySubjectPage({ subject, onBack }) {
         </div>
 
         {/* Content List */}
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-            <Loader2 className="animate-spin" size={32} color={theme.color} />
-          </div>
-        ) : materials.length === 0 ? (
+        {materials.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: 24, border: '1px dashed rgba(255,255,255,0.1)' }}>
             <BookOpen size={48} color={theme.color} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
             <h3 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 8px 0' }}>No modules found</h3>
@@ -73,7 +55,7 @@ export default function LibrarySubjectPage({ subject, onBack }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {materials.map((item, idx) => (
               <div 
-                key={item.id || idx}
+                key={idx}
                 onClick={() => setSelectedPdf(item.pdf_link)}
                 style={{
                   display: 'flex',
