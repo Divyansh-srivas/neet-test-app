@@ -9,24 +9,24 @@ function generateLibraryData() {
 
   // NEET PYQ folder IDs
   var neetFolders = {
-    physics:   '1_FpkNbmhPhH2K05VTKq02i5ulp2f8ifv',
-    chemistry: '1aB90Vy9c3ct18SQGs_eiyl4iuByciA9N',
-    biology:   '15iJSObfgX8xpEEfo207tfeCc0_C-206q',
+    physics:   'https://drive.google.com/drive/folders/1_FpkNbmhPhH2K05VTKq02i5ulp2f8ifv',
+    chemistry: 'https://drive.google.com/drive/folders/1aB90Vy9c3ct18SQGs_eiyl4iuByciA9N',
+    biology:   'https://drive.google.com/drive/folders/15iJSObfgX8xpEEfo207tfeCcO_C-206q',
   };
 
   // Random folder IDs
   var randomFolders = {
-    physics:   '1fRGcBBjS12anzdKuwjRU4eUxsg0vlYU9',
-    chemistry: '19TLpwwelPH-cpRHcEJAEO4uLYio-ochx',
-    biology:   '1iMQIKPpW_me4RlxgXpohcpMNNIKg9dzC',
+    physics:   'https://drive.google.com/drive/folders/1fRGcBBjS12anzdKuwjRU4eUxsg0vlYU9',
+    chemistry: 'https://drive.google.com/drive/folders/19TLpwweIPH-cpRHcEJAEO4uLYio-ochx',
+    biology:   'https://drive.google.com/drive/folders/1iMQIKPpW_me4RIxgXpohcpMNNIKg9dzC',
   };
 
+  // Auto-generate JS code
   var output = '// Auto-generated from Google Drive\n\n';
   var subjects = ['physics', 'chemistry', 'biology'];
 
   for (var s = 0; s < subjects.length; s++) {
     var subjectName = subjects[s];
-
     output += 'const ' + subjectName + ' = {\n';
 
     // NEET section
@@ -45,14 +45,25 @@ function generateLibraryData() {
     output += '};\n\n';
   }
 
-  output += 'const libraryData = { physics, chemistry, biology };\n\n';
-  output += 'export default libraryData;\n';
+  output += 'const libraryData = { physics, chemistry, biology };\n\nexport default libraryData;\n';
 
-  Logger.log(output);
+  // Save to Google Drive to avoid truncation
+  var file = DriveApp.createFile('libraryData_output.js', output, MimeType.PLAIN_TEXT);
+  console.log('✅ Success! Output saved to a file in your Google Drive named "libraryData_output.js"');
+  console.log('🔗 Link to open file: ' + file.getUrl());
 }
 
-function getFilesFromFolder(folderId) {
+function getFilesFromFolder(folderIdOrUrl) {
   try {
+    // Extract ID if a full URL is provided
+    var folderId = folderIdOrUrl;
+    if (folderId.indexOf('http') === 0) {
+      var match = folderId.match(/folders\/([a-zA-Z0-9-_]+)/);
+      if (match && match[1]) {
+        folderId = match[1];
+      }
+    }
+    
     var folder = DriveApp.getFolderById(folderId);
     var files = folder.getFiles();
     var fileList = [];
