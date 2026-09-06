@@ -98,10 +98,13 @@ export default function LibrarySubjectPage({ subject, onBack }) {
 
         {/* Content List */}
         {materials.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: 24, border: '1px dashed rgba(255,255,255,0.1)' }}>
-            <BookOpen size={48} color={currentTab?.color || theme.color} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-            <h3 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 8px 0' }}>No modules yet</h3>
-            <p style={{ color: '#9ca3af', margin: 0, fontSize: 14 }}>{currentTab?.label} questions for {subject} will appear here soon.</p>
+          <div style={{ textAlign: 'center', padding: '80px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: 24, border: '1px dashed rgba(255,255,255,0.1)' }}>
+            <BookOpen size={48} color={currentTab?.color || theme.color} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 18px', background: currentTab?.bg || 'rgba(99,102,241,0.1)', border: `1px solid ${currentTab?.border || 'rgba(99,102,241,0.2)'}`, borderRadius: 9999, marginBottom: 16 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: currentTab?.color || '#818cf8', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Coming Soon</span>
+            </div>
+            <h3 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 8px 0' }}>{currentTab?.label} — {subject}</h3>
+            <p style={{ color: '#9ca3af', margin: 0, fontSize: 14 }}>Chapter-wise {currentTab?.label} questions for {subject} will be added soon.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
