@@ -6,7 +6,7 @@ import './LibrarySubjectPage.css';
 const tabs = [
   { key: 'neet', label: 'NEET', icon: Target, color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.4)' },
   { key: 'jee', label: 'JEE', icon: GraduationCap, color: '#34d399', bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.4)' },
-  { key: 'random', label: 'Random', icon: Shuffle, color: '#f472b6', bg: 'rgba(236,72,153,0.15)', border: 'rgba(236,72,153,0.4)' },
+  { key: 'random', label: 'ChapterWise', icon: Shuffle, color: '#f472b6', bg: 'rgba(236,72,153,0.15)', border: 'rgba(236,72,153,0.4)' },
 ];
 
 export default function LibrarySubjectPage({ subject, onBack }) {
