@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, BookOpen, ExternalLink, Loader2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, ExternalLink, Loader2, X, Maximize2 } from 'lucide-react';
 import { fetchAPI } from '../api/apiClient';
 
 export default function LibrarySubjectPage({ subject, onBack }) {
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPdf, setSelectedPdf] = useState(null);
 
   // Styling maps based on subject
   const subjectThemes = {
@@ -71,11 +72,9 @@ export default function LibrarySubjectPage({ subject, onBack }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {materials.map((item, idx) => (
-              <a 
+              <div 
                 key={item.id || idx}
-                href={item.pdf_link}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => setSelectedPdf(item.pdf_link)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -84,7 +83,6 @@ export default function LibrarySubjectPage({ subject, onBack }) {
                   background: 'rgba(12, 19, 36, 0.6)',
                   border: '1px solid rgba(255,255,255,0.05)',
                   borderRadius: 16,
-                  textDecoration: 'none',
                   color: 'white',
                   transition: 'all 0.2s ease',
                   cursor: 'pointer'
@@ -112,13 +110,83 @@ export default function LibrarySubjectPage({ subject, onBack }) {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: theme.color, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Open PDF <ExternalLink size={16} />
+                  Read <Maximize2 size={16} />
                 </div>
-              </a>
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* PDF Viewer Modal */}
+      {selectedPdf && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(10px)',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px'
+        }}>
+          {/* Top Bar */}
+          <div style={{
+            width: '100%',
+            maxWidth: 1200,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginBottom: 16
+          }}>
+            <button 
+              onClick={() => setSelectedPdf(null)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: 'white',
+                padding: '10px 20px',
+                borderRadius: 9999,
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: 14,
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)' }}
+            >
+              <X size={18} /> Close Viewer
+            </button>
+          </div>
+
+          {/* Iframe Container */}
+          <div style={{
+            width: '100%',
+            maxWidth: 1200,
+            height: 'calc(100vh - 120px)',
+            background: 'white',
+            borderRadius: 16,
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}>
+            <iframe 
+              src={selectedPdf.replace(/\/view.*$/, '/preview')} 
+              width="100%" 
+              height="100%" 
+              style={{ border: 'none' }}
+              title="PDF Viewer"
+              allow="autoplay"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
