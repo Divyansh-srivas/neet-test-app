@@ -7,6 +7,7 @@ import { uploadPdf } from '../controllers/uploadController.js';
 import { getJobs, getJobStatus, deleteJob } from '../controllers/jobsController.js';
 import { getNotes, saveNotes } from '../controllers/notesController.js';
 import { getProfile, updateProfile } from '../controllers/profileController.js';
+import { getStudyMaterials } from '../controllers/libraryController.js';
 
 const router = express.Router();
 
@@ -43,5 +44,8 @@ router.put('/notes/:testId', saveNotes);
 // Profile API
 router.get('/profile', getProfile);
 router.put('/profile', updateProfile);
+
+// Library API
+router.get('/library/:subject', getStudyMaterials);
 
 export default router;

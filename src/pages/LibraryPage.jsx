@@ -1,5 +1,6 @@
-import React from 'react';
-import { Atom, FlaskConical, Dna, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Atom, FlaskConical, Dna, Sparkles, ArrowRight } from 'lucide-react';
+import LibrarySubjectPage from './LibrarySubjectPage';
 
 const subjects = [
   {
@@ -23,6 +24,12 @@ const subjects = [
 ];
 
 export default function LibraryPage() {
+  const [selectedSubject, setSelectedSubject] = useState(null);
+
+  if (selectedSubject) {
+    return <LibrarySubjectPage subject={selectedSubject} onBack={() => setSelectedSubject(null)} />;
+  }
+
   return (
     <div style={{ position: 'relative', minHeight: 'calc(100vh - 80px)', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', color: 'white', overflow: 'hidden' }}>
       
@@ -69,8 +76,9 @@ export default function LibraryPage() {
                 alignItems: 'center',
                 textAlign: 'center',
                 overflow: 'hidden',
-                cursor: 'default'
+                cursor: 'pointer'
               }}
+              onClick={() => setSelectedSubject(item.title.toLowerCase())}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-8px)'
                 e.currentTarget.style.borderColor = item.color.border
@@ -106,10 +114,10 @@ export default function LibraryPage() {
                 {item.desc}
               </p>
 
-              {/* Glass Badge */}
-              <span style={{ padding: '6px 16px', borderRadius: 9999, fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', border: `1px solid ${item.color.badgeBorder}`, backgroundColor: item.color.badgeBg, color: item.color.badgeText, boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)', marginTop: 'auto' }}>
-                Coming Soon
-              </span>
+              {/* Explore Button */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9999, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', border: `1px solid ${item.color.badgeBorder}`, backgroundColor: item.color.badgeBg, color: item.color.badgeText, boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)', marginTop: 'auto', transition: 'all 0.3s ease' }}>
+                Explore <ArrowRight size={14} />
+              </div>
             </div>
           );
         })}
