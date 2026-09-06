@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, BookOpen, X, Maximize2, Target, GraduationCap, Shuffle } from 'lucide-react';
 import libraryData from '../data/libraryData';
+import './LibrarySubjectPage.css';
 
 const tabs = [
   { key: 'neet', label: 'NEET', icon: Target, color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.4)' },
@@ -27,34 +28,32 @@ export default function LibrarySubjectPage({ subject, onBack }) {
   const materials = (subjectData[activeTab] || []).filter(item => item.pdf_link);
 
   return (
-    <div style={{ position: 'relative', minHeight: 'calc(100vh - 80px)', width: '100%', padding: '48px 24px', color: 'white', overflow: 'hidden' }}>
+    <div className="library-subject-page">
       
       {/* Background Glow */}
-      <div style={{ position: 'absolute', top: '10%', left: '50%', transform: 'translate(-50%, -50%)', width: 800, height: 400, backgroundColor: theme.bg, filter: 'blur(150px)', borderRadius: '50%', pointerEvents: 'none' }} />
+      <div 
+        className="bg-glow" 
+        style={{ backgroundColor: theme.bg }} 
+      />
 
-      <div style={{ maxWidth: 900, margin: '0 auto', position: 'relative', zIndex: 10 }}>
+      <div className="page-container">
         
-        {/* Header Section */}
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32 }}>
-          <button 
-            onClick={onBack}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#d1d5db', padding: '8px 16px', borderRadius: 9999, cursor: 'pointer', transition: 'all 0.2s ease', marginRight: 24 }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'white'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#d1d5db'; }}
-          >
-            <ArrowLeft size={16} /> Back
-          </button>
-          
-          <div>
-            <h1 style={{ fontSize: 32, fontWeight: 800, textTransform: 'capitalize', margin: 0, color: 'white', letterSpacing: '-0.02em' }}>
-              {subject} <span style={{ color: theme.color }}>Modules</span>
-            </h1>
-            <p style={{ color: '#9ca3af', margin: '4px 0 0 0', fontSize: 14 }}>Select a section and open chapter-wise questions.</p>
-          </div>
+        {/* Top: Breadcrumb Section */}
+        <button className="breadcrumb-link" onClick={onBack}>
+          <ArrowLeft size={16} className="breadcrumb-icon" /> 
+          Back to Library
+        </button>
+        
+        {/* Middle: Title Section */}
+        <div className="page-header">
+          <h1 className="page-title">
+            {subject} <span className="title-gradient">Modules</span>
+          </h1>
+          <p className="page-subtitle">Select a section and open chapter-wise questions.</p>
         </div>
 
-        {/* JEE / NEET / Random Tabs */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 32, flexWrap: 'wrap' }}>
+        {/* Bottom: JEE / NEET / Random Tabs */}
+        <div className="filter-tabs-container">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.key;
             const TabIcon = tab.icon;
@@ -62,32 +61,11 @@ export default function LibrarySubjectPage({ subject, onBack }) {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
+                className={`filter-tab ${isActive ? 'active' : ''}`}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '10px 24px',
-                  borderRadius: 9999,
-                  border: `1.5px solid ${isActive ? tab.border : 'rgba(255,255,255,0.08)'}`,
-                  background: isActive ? tab.bg : 'rgba(255,255,255,0.03)',
-                  color: isActive ? tab.color : '#9ca3af',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: 14,
-                  transition: 'all 0.25s ease',
-                  letterSpacing: '0.02em'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                    e.currentTarget.style.color = 'white';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                    e.currentTarget.style.color = '#9ca3af';
-                  }
+                  '--tab-color': tab.color,
+                  '--tab-bg': tab.bg,
+                  '--tab-border': tab.border,
                 }}
               >
                 <TabIcon size={16} /> {tab.label}

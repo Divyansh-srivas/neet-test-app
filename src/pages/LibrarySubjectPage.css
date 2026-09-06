@@ -1,0 +1,127 @@
+/* LibrarySubjectPage.css */
+
+.library-subject-page {
+  position: relative;
+  min-height: calc(100vh - 80px);
+  width: 100%;
+  padding: 48px 24px;
+  color: white;
+  overflow: hidden;
+}
+
+/* Background Glow Effect - Color is set dynamically via inline style */
+.bg-glow {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 800px;
+  height: 400px;
+  filter: blur(150px);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.page-container {
+  max-width: 900px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 10;
+}
+
+/* 1. Top: Breadcrumb Styling */
+.breadcrumb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: #9ca3af; /* Muted text color */
+  padding: 0;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: color 0.2s ease;
+  margin-bottom: 24px; /* Dedicated spacing before the title */
+}
+
+.breadcrumb-link:hover {
+  color: #f3f4f6; /* Brighter on hover */
+}
+
+.breadcrumb-icon {
+  transition: transform 0.2s ease; /* Smooth micro-interaction */
+}
+
+.breadcrumb-link:hover .breadcrumb-icon {
+  transform: translateX(-4px); /* Arrow slides slightly left on hover */
+}
+
+/* 2. Middle: Title & Subtitle Styling */
+.page-header {
+  margin-bottom: 40px; /* Dedicated spacing before the filter pill buttons */
+}
+
+.page-title {
+  font-size: 44px;
+  font-weight: 800;
+  text-transform: capitalize;
+  margin: 0 0 12px 0;
+  color: white;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.title-gradient {
+  /* Vibrant blue/indigo gradient as requested */
+  background: linear-gradient(135deg, #60a5fa 0%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+.page-subtitle {
+  color: #9ca3af;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+/* 3. Bottom: Filter Tabs Styling */
+.filter-tabs-container {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+}
+
+.filter-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.08); /* Inactive subtle border */
+  background: rgba(255, 255, 255, 0.03);
+  color: #9ca3af;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.25s ease;
+  letter-spacing: 0.02em;
+}
+
+/* Hover state for inactive tabs */
+.filter-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+}
+
+/* Active tab styling (border, bg, and color set dynamically via CSS variables) */
+.filter-tab.active {
+  border-color: var(--tab-border);
+  background: var(--tab-bg);
+  color: var(--tab-color);
+  box-shadow: 0 0 15px var(--tab-bg); /* Glowing effect */
+}
