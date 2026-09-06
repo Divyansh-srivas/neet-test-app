@@ -66,7 +66,7 @@ export default function LibraryPage() {
           letterSpacing: '-1px',
           lineHeight: 1.2
         }}>
-          Choose Your Subject
+          Explore by Subject
         </h1>
         <p style={{ 
           color: 'var(--muted)', 
