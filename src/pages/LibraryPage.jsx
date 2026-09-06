@@ -5,19 +5,19 @@ import LibrarySubjectPage from './LibrarySubjectPage';
 const subjects = [
   {
     title: 'Physics',
-    desc: 'Master mechanics, thermodynamics, electromagnetism & more',
+    desc: 'Chapter-wise JEE, NEET & random practice questions',
     icon: Atom,
     color: { icon: '#60a5fa', bg: 'rgba(59,130,246,0.2)', border: 'rgba(59,130,246,0.5)', badgeBg: 'rgba(59,130,246,0.1)', badgeText: '#93c5fd', badgeBorder: 'rgba(59,130,246,0.3)', glow: 'rgba(59,130,246,0.1)' },
   },
   {
     title: 'Chemistry',
-    desc: 'Organic, inorganic & physical chemistry modules',
+    desc: 'Chapter-wise JEE, NEET & random practice questions',
     icon: FlaskConical,
     color: { icon: '#34d399', bg: 'rgba(16,185,129,0.2)', border: 'rgba(16,185,129,0.5)', badgeBg: 'rgba(16,185,129,0.1)', badgeText: '#6ee7b7', badgeBorder: 'rgba(16,185,129,0.3)', glow: 'rgba(16,185,129,0.1)' },
   },
   {
     title: 'Biology',
-    desc: 'Botany, zoology & high-yield NCERT line-by-line questions',
+    desc: 'Chapter-wise JEE, NEET & random practice questions',
     icon: Dna,
     color: { icon: '#f472b6', bg: 'rgba(236,72,153,0.2)', border: 'rgba(236,72,153,0.5)', badgeBg: 'rgba(236,72,153,0.1)', badgeText: '#f9a8d4', badgeBorder: 'rgba(236,72,153,0.3)', glow: 'rgba(236,72,153,0.1)' },
   },

@@ -1,30 +1,42 @@
-// Physics Chapters — Paste your Google Drive links here
-const physics = [
-  { chapter_name: 'Alternating Current', pdf_link: '' },
-  { chapter_name: 'Atoms', pdf_link: '' },
-  { chapter_name: 'Basic Math', pdf_link: '' },
-  { chapter_name: 'Circular Motion', pdf_link: '' },
-  { chapter_name: 'Centre Of Mass', pdf_link: '' },
-  { chapter_name: 'Current Electricity', pdf_link: '' },
-  { chapter_name: 'Dual Nature Of Matter', pdf_link: '' },
-  { chapter_name: 'Electric Charge And Fields', pdf_link: '' },
-  { chapter_name: 'Electromagnetic Induction', pdf_link: '' },
-  { chapter_name: 'Electrostatics', pdf_link: '' },
-];
+// Library Data — Nested: Subject → Section (JEE/NEET/Random) → Chapters
+// Paste your Google Drive links for each chapter
 
-// Chemistry Chapters
-const chemistry = [
-  { chapter_name: 'Organic Chemistry Basics', pdf_link: '' },
-  { chapter_name: 'Chemical Bonding', pdf_link: '' },
-  // Add more chapters here...
-];
+const physics = {
+  neet: [
+    // NEET Physics chapters — paste Drive links here
+    // { chapter_name: 'Mechanics', pdf_link: 'https://drive.google.com/file/d/.../view' },
+  ],
+  jee: [
+    // JEE Physics chapters
+  ],
+  random: [
+    // Random Physics practice
+  ],
+};
 
-// Biology Chapters
-const biology = [
-  { chapter_name: 'Cell Biology', pdf_link: '' },
-  { chapter_name: 'Human Physiology', pdf_link: '' },
-  // Add more chapters here...
-];
+const chemistry = {
+  neet: [
+    // NEET Chemistry chapters
+  ],
+  jee: [
+    // JEE Chemistry chapters
+  ],
+  random: [
+    // Random Chemistry practice
+  ],
+};
+
+const biology = {
+  neet: [
+    // NEET Biology chapters
+  ],
+  jee: [
+    // JEE Biology chapters
+  ],
+  random: [
+    // Random Biology practice
+  ],
+};
 
 const libraryData = { physics, chemistry, biology };
 
