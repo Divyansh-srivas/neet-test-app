@@ -17,7 +17,7 @@ const subjects = [
   },
   {
     title: 'Biology',
-    desc: 'Chapter-wise JEE, NEET & random practice questions',
+    desc: 'Chapter-wise NEET & random practice questions',
     icon: Dna,
     color: { icon: '#f472b6', bg: 'rgba(236,72,153,0.2)', border: 'rgba(236,72,153,0.5)', badgeBg: 'rgba(236,72,153,0.1)', badgeText: '#f9a8d4', badgeBorder: 'rgba(236,72,153,0.3)', glow: 'rgba(236,72,153,0.1)' },
   },
