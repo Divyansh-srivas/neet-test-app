@@ -54,7 +54,7 @@ export default function LibrarySubjectPage({ subject, onBack }) {
 
         {/* Bottom: JEE / NEET / Random Tabs */}
         <div className="filter-tabs-container">
-          {tabs.map((tab) => {
+          {tabs.filter(tab => !(subject.toLowerCase() === 'biology' && tab.key === 'jee')).map((tab) => {
             const isActive = activeTab === tab.key;
             const TabIcon = tab.icon;
             return (
