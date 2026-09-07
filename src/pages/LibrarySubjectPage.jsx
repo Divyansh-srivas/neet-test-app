@@ -29,7 +29,7 @@ export default function LibrarySubjectPage({ subject, onBack }) {
   const materials = (subjectData[activeTab] || []).filter(item => item.pdf_link);
 
   if (selectedChapter) {
-    return <InteractiveMcqRunner topicName={selectedChapter.chapter_name} onBack={() => setSelectedChapter(null)} />;
+    return <InteractiveMcqRunner topicName={selectedChapter.chapter_name} pdfUrl={selectedChapter.pdf_link} onBack={() => setSelectedChapter(null)} />;
   }
 
   return (

@@ -35,6 +35,7 @@ const sampleQuestions = [
 export default function InteractiveMcqRunner({ 
   questions = sampleQuestions, 
   topicName = "Units & Measurements > Dimensions", 
+  pdfUrl,
   onBack 
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -104,6 +105,11 @@ export default function InteractiveMcqRunner({
         </div>
         
         <div className="mcq-topbar-right">
+          {pdfUrl && (
+            <button className="mcq-action-btn secondary" onClick={() => window.open(pdfUrl.replace(/\/view.*$/, '/preview'), '_blank')} style={{ padding: '6px 12px', fontSize: 13, marginRight: 8, gap: 4 }}>
+              Open Original PDF
+            </button>
+          )}
           <div className="mcq-timer">
             <Clock size={16} />
             {formatTime(seconds)}
