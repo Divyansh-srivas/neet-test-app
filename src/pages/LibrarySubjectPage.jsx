@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, BookOpen, X, Maximize2, Target, GraduationCap, Shuffle } from 'lucide-react';
 import libraryData from '../data/libraryData';
 import './LibrarySubjectPage.css';
+import InteractiveMcqRunner from '../components/InteractiveMcqRunner';
 
 const tabs = [
   { key: 'neet', label: 'NEET', icon: Target, color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.4)' },
@@ -11,7 +12,7 @@ const tabs = [
 
 export default function LibrarySubjectPage({ subject, onBack }) {
   const [activeTab, setActiveTab] = useState('neet');
-  const [selectedPdf, setSelectedPdf] = useState(null);
+  const [selectedChapter, setSelectedChapter] = useState(null);
 
   // Styling maps based on subject
   const subjectThemes = {
@@ -26,6 +27,10 @@ export default function LibrarySubjectPage({ subject, onBack }) {
   // Get chapters: libraryData.physics.neet, libraryData.physics.jee, etc.
   const subjectData = libraryData[subject.toLowerCase()] || {};
   const materials = (subjectData[activeTab] || []).filter(item => item.pdf_link);
+
+  if (selectedChapter) {
+    return <InteractiveMcqRunner topicName={selectedChapter.chapter_name} onBack={() => setSelectedChapter(null)} />;
+  }
 
   return (
     <div className="library-subject-page">
@@ -89,7 +94,7 @@ export default function LibrarySubjectPage({ subject, onBack }) {
             {materials.map((item, idx) => (
               <div 
                 key={idx}
-                onClick={() => setSelectedPdf(item.pdf_link)}
+                onClick={() => setSelectedChapter(item)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -132,29 +137,6 @@ export default function LibrarySubjectPage({ subject, onBack }) {
           </div>
         )}
       </div>
-
-      {/* PDF Viewer Modal */}
-      {selectedPdf && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(10px)',
-          zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px'
-        }}>
-          <div style={{ width: '100%', maxWidth: 1200, display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-            <button 
-              onClick={() => setSelectedPdf(null)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '10px 20px', borderRadius: 9999, cursor: 'pointer', fontWeight: 600, fontSize: 14, transition: 'all 0.2s ease' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-            >
-              <X size={18} /> Close Viewer
-            </button>
-          </div>
-          <div style={{ width: '100%', maxWidth: 1200, height: 'calc(100vh - 120px)', background: 'white', borderRadius: 16, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
-            <iframe src={selectedPdf.replace(/\/view.*$/, '/preview')} width="100%" height="100%" style={{ border: 'none' }} title="PDF Viewer" allow="autoplay" />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
