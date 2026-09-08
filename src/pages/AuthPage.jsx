@@ -7,7 +7,7 @@ import logoImg from '../assets/logo.jpg'
 import FeaturesBento from '../components/FeaturesBento.jsx'
 
 export default function AuthPage({ forceSetPassword }) {
-  const { user, sendEmailLink, loginWithPassword, setPassword, resetPassword } = useAuth()
+  const { user, signUpWithPassword, loginWithPassword, resendVerification, setPassword, resetPassword } = useAuth()
   
   // Default to signup to get the users to convert immediately
   const [page, setPage] = useState(forceSetPassword ? 'setPassword' : 'signup')
@@ -15,14 +15,19 @@ export default function AuthPage({ forceSetPassword }) {
   const [form, setForm] = useState({ email: '', fullName: '', password: '', confirmPassword: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  // Magic Link states for signup
-  const [linkSent, setLinkSent] = useState(false)
-  const [resendCountdown, setResendCountdown] = useState(0)
-  const [resendCount, setResendCount] = useState(0)
-  const [isResending, setIsResending] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
   const [resetSent, setResetSent] = useState(false)
+
+  // Signup success state
+  const [signupComplete, setSignupComplete] = useState(false)
+
+  // "User already exists" modal
+  const [showExistsModal, setShowExistsModal] = useState(false)
+
+  // Email not verified state (for login flow)
+  const [unverifiedEmail, setUnverifiedEmail] = useState(null)
+  const [resendCountdown, setResendCountdown] = useState(0)
+  const [isResending, setIsResending] = useState(false)
 
   // Password visibility states
   const [showPassword, setShowPassword] = useState(false)
@@ -37,42 +42,19 @@ export default function AuthPage({ forceSetPassword }) {
     setError('')
     setSuccessMsg('')
     setForm({ email: '', fullName: '', password: '', confirmPassword: '' })
-    setLinkSent(false)
     setResetSent(false)
+    setSignupComplete(false)
+    setShowExistsModal(false)
+    setUnverifiedEmail(null)
     setResendCountdown(0)
-    setResendCount(0)
   }
-
-  // Restore state if user navigates back to signup page
-  useEffect(() => {
-    if (page === 'signup') {
-      const savedEmail = sessionStorage.getItem('emailForSignIn')
-      const savedFlag = sessionStorage.getItem('emailLinkSentFlag')
-      const savedExpiry = sessionStorage.getItem('emailLinkResendExpiry')
-      const savedCount = sessionStorage.getItem('emailLinkResendCount')
-      if (savedCount) setResendCount(parseInt(savedCount, 10))
-      if (savedFlag === 'true' && savedEmail) {
-        setForm(p => ({ ...p, email: savedEmail }))
-        setLinkSent(true)
-      }
-      if (savedExpiry) {
-        const rem = Math.floor((parseInt(savedExpiry, 10) - Date.now()) / 1000)
-        if (rem > 0) setResendCountdown(rem)
-      }
-    }
-  }, [page])
 
   // Resend countdown timer
   useEffect(() => {
-    if (resendCountdown <= 0) { sessionStorage.removeItem('emailLinkResendExpiry'); return }
+    if (resendCountdown <= 0) return
     const t = setInterval(() => setResendCountdown(p => p - 1), 1000)
     return () => clearInterval(t)
   }, [resendCountdown])
-
-  const startResendTimer = (secs = 60) => {
-    setResendCountdown(secs)
-    sessionStorage.setItem('emailLinkResendExpiry', (Date.now() + secs * 1000).toString())
-  }
 
   const handleSignupSubmit = async (e) => {
     e.preventDefault()
@@ -90,15 +72,26 @@ export default function AuthPage({ forceSetPassword }) {
       setLoading(false)
       return
     }
+    if (form.password.length < 6) {
+      setError('Password must be at least 6 characters.')
+      setLoading(false)
+      return
+    }
+    if (form.password !== form.confirmPassword) {
+      setError('Passwords do not match.')
+      setLoading(false)
+      return
+    }
 
-    const { error } = await sendEmailLink(form.email.trim(), form.fullName.trim())
+    const { data, error } = await signUpWithPassword(form.email.trim(), form.password, form.fullName.trim())
     if (error) {
-      setError(error.message)
+      if (error.message === 'USER_ALREADY_EXISTS') {
+        setShowExistsModal(true)
+      } else {
+        setError(error.message)
+      }
     } else {
-      setLinkSent(true)
-      startResendTimer()
-      sessionStorage.setItem('emailLinkSentFlag', 'true')
-      sessionStorage.setItem('emailSignInName', form.fullName.trim())
+      setSignupComplete(true)
     }
     setLoading(false)
   }
@@ -106,6 +99,7 @@ export default function AuthPage({ forceSetPassword }) {
   const handleLoginSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setUnverifiedEmail(null)
     setLoading(true)
 
     if (!form.email || !form.password) {
@@ -116,9 +110,28 @@ export default function AuthPage({ forceSetPassword }) {
 
     const { error } = await loginWithPassword(form.email.trim(), form.password)
     if (error) {
-      setError(error.message)
+      if (error.message === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(error.unverifiedEmail || form.email.trim())
+      } else {
+        setError(error.message)
+      }
     }
     setLoading(false)
+  }
+
+  const handleResendVerification = async () => {
+    if (resendCountdown > 0) return
+    setIsResending(true)
+    setError('')
+    setSuccessMsg('')
+    const { data, error } = await resendVerification(unverifiedEmail, form.password)
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccessMsg('Verification email sent! Check your inbox.')
+      setResendCountdown(60)
+    }
+    setIsResending(false)
   }
 
   const handleSetPasswordSubmit = async (e) => {
@@ -165,24 +178,6 @@ export default function AuthPage({ forceSetPassword }) {
       setSuccessMsg('Password reset email sent!')
     }
     setLoading(false)
-  }
-
-  const handleResend = async () => {
-    if (resendCount >= 5) { setError('Maximum resend limit reached. Please try again later.'); return }
-    setIsResending(true)
-    setError('')
-    setSuccessMsg('')
-    const { error } = await sendEmailLink(form.email.trim(), form.fullName.trim())
-    if (error) {
-      setError(error.message)
-    } else {
-      const n = resendCount + 1
-      setResendCount(n)
-      sessionStorage.setItem('emailLinkResendCount', n.toString())
-      setSuccessMsg('A new sign-in link has been sent!')
-      startResendTimer()
-    }
-    setIsResending(false)
   }
 
   return (
@@ -287,6 +282,27 @@ export default function AuthPage({ forceSetPassword }) {
 
             {/* === LOGIN === */}
             {page === 'login' && (
+              unverifiedEmail ? (
+                <div>
+                  <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                    <div style={{ width: 68, height: 68, borderRadius: 20, background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                      <Mail size={34} color="#fbbf24" />
+                    </div>
+                    <h2 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Verify Your Email</h2>
+                    <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>Your email <strong style={{ color: '#818cf8' }}>{unverifiedEmail}</strong> is not verified yet. Please check your inbox and click the verification link.</p>
+                  </div>
+                  {error && <div style={errorStyle}>{error}</div>}
+                  {successMsg && <div style={successStyle}>{successMsg}</div>}
+                  {resendCountdown > 0 ? (
+                    <div style={{ textAlign: 'center', padding: '12px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, color: 'var(--muted)', fontSize: 13, marginBottom: 10 }}>Resend in <strong style={{ color: '#94a3b8' }}>{resendCountdown}s</strong></div>
+                  ) : (
+                    <button onClick={handleResendVerification} disabled={isResending} style={{ ...outlineBtnStyle, width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, opacity: isResending ? 0.5 : 1 }}>
+                      <RotateCcw size={15} /> {isResending ? 'Sending...' : 'Resend Verification Email'}
+                    </button>
+                  )}
+                  <button onClick={() => { setUnverifiedEmail(null); setError(''); setSuccessMsg('') }} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>← Back to Login</button>
+                </div>
+              ) : (
               <form onSubmit={handleLoginSubmit}>
                 <div style={{ marginBottom: 16 }}>
                   <label style={labelStyle}>Email Address</label>
@@ -320,37 +336,27 @@ export default function AuthPage({ forceSetPassword }) {
                   Don't have an account? <button type="button" onClick={() => resetForm('signup')} style={{ background: 'none', border: 'none', color: '#818cf8', cursor: 'pointer', padding: 0, fontWeight: 600 }}>Sign up</button>
                 </div>
               </form>
+              )
             )}
 
-            {/* === SIGN UP === */}
+            {/* === SIGN UP (Email + Password) === */}
             {page === 'signup' && (
-              linkSent ? (
-                <div>
-                  <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                    <div style={{ width: 68, height: 68, borderRadius: 20, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                      <CheckCircle size={34} color="#22c55e" />
-                    </div>
-                    <h2 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Link Sent!</h2>
-                    <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>We sent a sign-up link to <strong style={{ color: '#818cf8' }}>{form.email}</strong></p>
+              signupComplete ? (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ width: 68, height: 68, borderRadius: 20, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                    <CheckCircle size={34} color="#22c55e" />
                   </div>
+                  <h2 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Account Created!</h2>
+                  <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6, marginBottom: 24 }}>We sent a verification link to <strong style={{ color: '#818cf8' }}>{form.email}</strong>. Please check your inbox and verify your email before logging in.</p>
                   <div style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: 12, padding: '16px 20px', marginBottom: 24 }}>
-                    {[ 'Open your email inbox', 'Click the verification link', 'Set your password to finish' ].map((t, i) => (
+                    {[ 'Open your email inbox', 'Click the verification link', 'Come back and log in' ].map((t, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < 2 ? 10 : 0 }}>
                         <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{i + 1}</div>
                         <span style={{ color: '#cbd5e1', fontSize: 13 }}>{t}</span>
                       </div>
                     ))}
                   </div>
-                  {resendCountdown > 0 ? (
-                    <div style={{ textAlign: 'center', padding: '12px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, color: 'var(--muted)', fontSize: 13, marginBottom: 10 }}>Resend in <strong style={{ color: '#94a3b8' }}>{resendCountdown}s</strong></div>
-                  ) : (
-                    <button onClick={handleResend} disabled={isResending || resendCount >= 5} style={{ ...outlineBtnStyle, width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, opacity: (isResending || resendCount >= 5) ? 0.5 : 1 }}>
-                      <RotateCcw size={15} /> {isResending ? 'Sending...' : 'Resend Link'}
-                    </button>
-                  )}
-                  {error && <div style={errorStyle}>{error}</div>}
-                  {successMsg && <div style={successStyle}>{successMsg}</div>}
-                  <button onClick={() => { setLinkSent(false); sessionStorage.removeItem('emailLinkSentFlag') }} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>← Use a different email</button>
+                  <button onClick={() => resetForm('login')} style={{ ...primaryBtnStyle, width: '100%' }}>Go to Login</button>
                 </div>
               ) : (
                 <form onSubmit={handleSignupSubmit}>
@@ -361,16 +367,36 @@ export default function AuthPage({ forceSetPassword }) {
                       <input type="text" value={form.fullName} onChange={e => setForm(p => ({ ...p, fullName: e.target.value }))} placeholder="John Doe" required style={inputStyle} />
                     </div>
                   </div>
-                  <div style={{ marginBottom: 24 }}>
+                  <div style={{ marginBottom: 16 }}>
                     <label style={labelStyle}>Email Address</label>
                     <div style={{ position: 'relative' }}>
                       <Mail size={18} color="var(--muted)" style={inputIconStyle} />
                       <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="you@example.com" required style={inputStyle} />
                     </div>
                   </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={labelStyle}>Password</label>
+                    <div style={{ position: 'relative' }}>
+                      <Lock size={18} color="var(--muted)" style={inputIconStyle} />
+                      <input type={showPassword ? "text" : "password"} value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="At least 6 characters" required style={inputStyle} />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} style={showPwdBtnStyle}>
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 24 }}>
+                    <label style={labelStyle}>Confirm Password</label>
+                    <div style={{ position: 'relative' }}>
+                      <KeyRound size={18} color="var(--muted)" style={inputIconStyle} />
+                      <input type={showConfirmPassword ? "text" : "password"} value={form.confirmPassword} onChange={e => setForm(p => ({ ...p, confirmPassword: e.target.value }))} placeholder="Confirm password" required style={inputStyle} />
+                      <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} style={showPwdBtnStyle}>
+                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
                   {error && <div style={errorStyle}>{error}</div>}
                   <button type="submit" disabled={loading} style={{ ...primaryBtnStyle, width: '100%', opacity: loading ? 0.7 : 1 }}>
-                    {loading ? 'Sending...' : 'Start Your Smart Practice →'}
+                    {loading ? 'Creating Account...' : 'Create Account →'}
                   </button>
                   <div style={{ textAlign: 'center', marginTop: 24, fontSize: 14, color: 'var(--muted)' }}>
                     Already have an account? <button type="button" onClick={() => resetForm('login')} style={{ background: 'none', border: 'none', color: '#818cf8', cursor: 'pointer', padding: 0, fontWeight: 600 }}>Log In</button>
@@ -448,6 +474,43 @@ export default function AuthPage({ forceSetPassword }) {
           </div>
         </div>
         </div>
+
+        {/* === "User Already Exists" Modal Overlay === */}
+        {showExistsModal && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, padding: 24
+          }}>
+            <div style={{
+              background: '#111827', border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: 20, padding: '40px 32px', maxWidth: 400, width: '100%',
+              textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.6)',
+              animation: 'fadeInScale 0.25s ease-out'
+            }}>
+              <div style={{ width: 68, height: 68, borderRadius: 20, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                <X size={34} color="#ef4444" />
+              </div>
+              <h2 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginBottom: 8 }}>User Already Exists</h2>
+              <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.6, marginBottom: 28 }}>
+                An account with this email is already registered. Please log in using your password.
+              </p>
+              <button 
+                onClick={() => { setShowExistsModal(false); resetForm('login'); setForm(p => ({ ...p, email: form.email })) }}
+                style={{ ...primaryBtnStyle, width: '100%', marginBottom: 12 }}
+              >
+                Go to Login →
+              </button>
+              <button 
+                onClick={() => setShowExistsModal(false)}
+                style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
+              >
+                ← Back to Sign Up
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Bouncing Scroll Indicator */}
         <motion.div 

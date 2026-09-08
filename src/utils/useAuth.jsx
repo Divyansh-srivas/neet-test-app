@@ -6,6 +6,8 @@ import {
   isSignInWithEmailLink,
   signInWithEmailLink,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
   updatePassword as firebaseUpdatePassword,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   onAuthStateChanged,
@@ -210,6 +212,15 @@ export function AuthProvider({ children }) {
     try {
       const result = await signInWithEmailAndPassword(auth, email, password)
 
+      // Check if email is verified
+      if (!result.user.emailVerified) {
+        // Sign out the unverified user so they can't access the app
+        await firebaseSignOut(auth)
+        setUser(null)
+        setProfile(null)
+        return { data: null, error: { message: 'EMAIL_NOT_VERIFIED', unverifiedEmail: email } }
+      }
+
       // Track session
       try {
         const { browser, os, device_name } = getDeviceInfo()
@@ -230,6 +241,76 @@ export function AuthProvider({ children }) {
       let msg = 'Failed to log in. Please check your credentials.'
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         msg = 'Invalid email or password.'
+      }
+      return { data: null, error: { message: msg } }
+    }
+  }
+
+  const signUpWithPassword = async (email, password, fullName) => {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password)
+      
+      // Save name to backend profile
+      if (fullName && fullName.trim()) {
+        try {
+          const token = await result.user.getIdToken()
+          await fetch(`https://api.neogravix.in/api/profile`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ full_name: fullName.trim() })
+          })
+        } catch (err) {
+          console.error("Error saving name:", err)
+        }
+      }
+
+      // Send ONE verification email
+      await sendEmailVerification(result.user)
+
+      // Sign out immediately so unverified user can't access the app
+      await firebaseSignOut(auth)
+      setUser(null)
+      setProfile(null)
+
+      return { data: { signedUp: true }, error: null }
+    } catch (error) {
+      console.error('[Firebase Password Signup] failed:', error)
+      let msg = 'Failed to sign up.'
+      if (error.code === 'auth/email-already-in-use') {
+        msg = 'USER_ALREADY_EXISTS'
+      } else if (error.code === 'auth/weak-password') {
+        msg = 'Password should be at least 6 characters.'
+      } else if (error.code === 'auth/invalid-email') {
+        msg = 'Invalid email address.'
+      }
+      return { data: null, error: { message: msg } }
+    }
+  }
+
+  /**
+   * Resend verification email — used when login detects unverified email.
+   * Signs in temporarily, sends verification, then signs out again.
+   */
+  const resendVerification = async (email, password) => {
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password)
+      if (result.user.emailVerified) {
+        // Already verified, no need to resend
+        await firebaseSignOut(auth)
+        setUser(null)
+        setProfile(null)
+        return { data: null, error: { message: 'Email is already verified. Please log in.' } }
+      }
+      await sendEmailVerification(result.user)
+      await firebaseSignOut(auth)
+      setUser(null)
+      setProfile(null)
+      return { data: true, error: null }
+    } catch (error) {
+      console.error('[Firebase Resend Verification] failed:', error)
+      let msg = 'Failed to resend verification email.'
+      if (error.code === 'auth/too-many-requests') {
+        msg = 'Too many requests. Please wait a moment and try again.'
       }
       return { data: null, error: { message: msg } }
     }
@@ -274,7 +355,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, sendEmailLink, completeEmailSignIn, loginWithPassword, setPassword, resetPassword, signOut, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, sendEmailLink, completeEmailSignIn, loginWithPassword, signUpWithPassword, resendVerification, setPassword, resetPassword, signOut, updateProfile }}>
       {children}
     </AuthContext.Provider>
   )
