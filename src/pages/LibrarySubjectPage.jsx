@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, BookOpen, X, Maximize2, Target, GraduationCap, Shuffle } from 'lucide-react';
+import { ArrowLeft, BookOpen, X, Maximize2, Target, GraduationCap, Shuffle, Sparkles } from 'lucide-react';
 import libraryData from '../data/libraryData';
 import './LibrarySubjectPage.css';
 const tabs = [
@@ -10,7 +10,6 @@ const tabs = [
 
 export default function LibrarySubjectPage({ subject, onBack }) {
   const [activeTab, setActiveTab] = useState('neet');
-  const [selectedPdf, setSelectedPdf] = useState(null);
 
   // Styling maps based on subject
   const subjectThemes = {
@@ -73,87 +72,76 @@ export default function LibrarySubjectPage({ subject, onBack }) {
           })}
         </div>
 
-        {/* Content List */}
-        {materials.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '80px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: 24, border: '1px dashed rgba(255,255,255,0.1)' }}>
-            <BookOpen size={48} color={currentTab?.color || theme.color} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 18px', background: currentTab?.bg || 'rgba(99,102,241,0.1)', border: `1px solid ${currentTab?.border || 'rgba(99,102,241,0.2)'}`, borderRadius: 9999, marginBottom: 16 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: currentTab?.color || '#818cf8', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Coming Soon</span>
-            </div>
-            <h3 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 8px 0' }}>{currentTab?.label} — {subject}</h3>
-            <p style={{ color: '#9ca3af', margin: 0, fontSize: 14 }}>Chapter-wise {currentTab?.label} questions for {subject} will be added soon.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {materials.map((item, idx) => (
-              <div 
-                key={idx}
-                onClick={() => setSelectedPdf(item.pdf_link)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '24px',
-                  background: 'rgba(12, 19, 36, 0.6)',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  borderRadius: 16,
-                  color: 'white',
-                  transition: 'all 0.2s ease',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(12, 19, 36, 0.9)';
-                  e.currentTarget.style.border = `1px solid ${currentTab?.border || theme.border}`;
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = `0 10px 30px -10px ${currentTab?.bg || theme.bg}`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(12, 19, 36, 0.6)';
-                  e.currentTarget.style.border = '1px solid rgba(255,255,255,0.05)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 12, background: currentTab?.bg || theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: currentTab?.color || theme.color }}>
-                    <BookOpen size={24} />
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 4px 0' }}>{item.chapter_name}</h3>
-                    <p style={{ fontSize: 13, color: '#9ca3af', margin: 0 }}>Chapter Module</p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: currentTab?.color || theme.color, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Read <Maximize2 size={16} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* PDF Viewer Modal */}
-      {selectedPdf && (
+        {/* Content List - Coming Soon State */}
         <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(10px)',
-          zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px'
+          marginTop: 24,
+          padding: '80px 24px',
+          background: 'rgba(12, 19, 36, 0.5)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 24,
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+          boxShadow: '0 20px 40px -20px rgba(0,0,0,0.5)',
+          position: 'relative',
+          overflow: 'hidden'
         }}>
-          <div style={{ width: '100%', maxWidth: 1200, display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-            <button 
-              onClick={() => setSelectedPdf(null)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '10px 20px', borderRadius: 9999, cursor: 'pointer', fontWeight: 600, fontSize: 14, transition: 'all 0.2s ease' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-            >
-              <X size={18} /> Close Viewer
-            </button>
+          {/* Subtle glowing orb behind the content */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 300,
+            height: 300,
+            background: currentTab?.color || theme.color,
+            opacity: 0.05,
+            filter: 'blur(80px)',
+            pointerEvents: 'none',
+            borderRadius: '50%'
+          }} />
+
+          <div style={{
+            width: 80,
+            height: 80,
+            borderRadius: 24,
+            background: currentTab?.bg || theme.bg,
+            border: `1px solid ${currentTab?.border || theme.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: currentTab?.color || theme.color,
+            marginBottom: 24,
+            boxShadow: `0 0 30px ${currentTab?.bg || theme.bg}`
+          }}>
+            <Sparkles size={40} />
           </div>
-          <div style={{ width: '100%', maxWidth: 1200, height: 'calc(100vh - 120px)', background: 'white', borderRadius: 16, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
-            <iframe src={selectedPdf.replace(/\/view.*$/, '/preview')} width="100%" height="100%" style={{ border: 'none' }} title="PDF Viewer" allow="autoplay" />
+
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 16px',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 9999,
+            marginBottom: 20
+          }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: currentTab?.color || theme.color, boxShadow: `0 0 10px ${currentTab?.color || theme.color}` }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#e2e8f0', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Coming Soon</span>
           </div>
+
+          <h3 style={{ fontSize: 24, fontWeight: 700, color: 'white', margin: '0 0 12px 0' }}>
+            Interactive Question Bank Under Construction
+          </h3>
+          <p style={{ color: '#94a3b8', margin: 0, fontSize: 15, lineHeight: 1.6, maxWidth: 480 }}>
+            We are currently curating verified NTA-pattern chapter-wise questions and interactive CBT mocks for this section. Stay tuned!
+          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 }
