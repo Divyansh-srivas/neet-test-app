@@ -16,6 +16,7 @@ import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import { LogOut } from 'lucide-react'
 import NotificationCenter from './components/NotificationCenter'
+import LogoutConfirmModal from './components/LogoutConfirmModal'
 import { SettingsProvider } from './utils/SettingsContext'
 import { JobProvider } from './utils/JobContext'
 import JobProgressWidget from './components/JobProgressWidget'
@@ -28,6 +29,7 @@ function AppContent() {
   const [signInComplete, setSignInComplete] = useState(false)
   const [emailLinkError, setEmailLinkError] = useState('')
   const [forcePasswordScreen, setForcePasswordScreen] = useState(false)
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
 
   // Auto-complete sign-in when user clicks the Firebase email link
   useEffect(() => {
@@ -123,7 +125,7 @@ function AppContent() {
     )
   }
 
-  if (!user || forcePasswordScreen) return <AuthPage forceSetPassword={forcePasswordScreen} />
+  if (!user || !user.emailVerified || forcePasswordScreen) return <AuthPage forceSetPassword={forcePasswordScreen} />
 
   const isExam = page === 'exam' || page === 'pretest'
 
@@ -144,7 +146,7 @@ function AppContent() {
         {!isExam && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginBottom: 16 }}>
             <NotificationCenter align="right" direction="down" />
-            <button onClick={signOut} style={{
+            <button onClick={() => setIsLogoutModalOpen(true)} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
               background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10,
               color: '#94a3b8', cursor: 'pointer', fontSize: 13
@@ -172,6 +174,15 @@ function AppContent() {
           .main-content { margin-left: 0 !important; padding: ${isExam ? '0' : '20px 16px 90px'} !important; }
         }
       `}</style>
+
+      <LogoutConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={() => {
+          setIsLogoutModalOpen(false)
+          signOut()
+        }}
+      />
     </div>
   )
 }

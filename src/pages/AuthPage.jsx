@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import bgImage from '../assets/bg.jpg'
 import logoImg from '../assets/logo.jpg'
 import FeaturesBento from '../components/FeaturesBento.jsx'
+import SpamNoticeModal from '../components/SpamNoticeModal.jsx'
 
 export default function AuthPage({ forceSetPassword }) {
   const { user, signUpWithPassword, loginWithPassword, resendVerification, setPassword, resetPassword } = useAuth()
@@ -342,22 +343,7 @@ export default function AuthPage({ forceSetPassword }) {
             {/* === SIGN UP (Email + Password) === */}
             {page === 'signup' && (
               signupComplete ? (
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ width: 68, height: 68, borderRadius: 20, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                    <CheckCircle size={34} color="#22c55e" />
-                  </div>
-                  <h2 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Account Created!</h2>
-                  <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6, marginBottom: 24 }}>We sent a verification link to <strong style={{ color: '#818cf8' }}>{form.email}</strong>. Please check your inbox and verify your email before logging in.</p>
-                  <div style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: 12, padding: '16px 20px', marginBottom: 24 }}>
-                    {[ 'Open your email inbox', 'Click the verification link', 'Come back and log in' ].map((t, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < 2 ? 10 : 0 }}>
-                        <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{i + 1}</div>
-                        <span style={{ color: '#cbd5e1', fontSize: 13 }}>{t}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={() => resetForm('login')} style={{ ...primaryBtnStyle, width: '100%' }}>Go to Login</button>
-                </div>
+                <SpamNoticeModal email={form.email} onGoToLogin={() => resetForm('login')} />
               ) : (
                 <form onSubmit={handleSignupSubmit}>
                   <div style={{ marginBottom: 16 }}>

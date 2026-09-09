@@ -47,6 +47,14 @@ export function AuthProvider({ children }) {
   // Listen for Firebase auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Prevent unverified users from gaining session state during sign-up race conditions
+      if (firebaseUser && !firebaseUser.emailVerified) {
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+        return
+      }
+
       setUser(firebaseUser || null)
       if (firebaseUser) {
         setLoading(false) // Render app immediately
