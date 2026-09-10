@@ -252,11 +252,11 @@ export default function AuthPage({ forceSetPassword }) {
             marginBottom: 36, 
             lineHeight: 1.6 
           }}>
-            Stop grinding blindly. Master your NEET preparation with 450,000+ hand-picked MCQs and AI-driven insights designed to maximize your rank.
+            Stop grinding blindly. Master your NEET preparation with hand-picked MCQs and AI-driven insights designed to maximize your rank.
           </p>
 
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {[{ icon: Sparkles, text: 'Smart Learning' }, { icon: BookOpen, text: '450K+ MCQs' }, { icon: GraduationCap, text: 'Rank Booster' }].map((item, i) => (
+            {[{ icon: Sparkles, text: 'Smart Learning' }, { icon: BookOpen, text: 'Chapter-wise MCQs' }, { icon: GraduationCap, text: 'Rank Booster' }].map((item, i) => (
               <div key={i} style={featurePillStyle}><item.icon size={18} color="#818cf8" /><span style={{ color: '#e0e7ff', fontWeight: 500 }}>{item.text}</span></div>
             ))}
           </div>
