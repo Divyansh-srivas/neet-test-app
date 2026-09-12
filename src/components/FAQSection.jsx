@@ -1,82 +1,90 @@
 import React, { useState } from 'react';
-import { ChevronDown, HelpCircle } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
 import './faq-section.css';
 
 const faqsData = [
   {
-    id: 1,
+    num: "01",
     question: "How does Neogravix convert my coaching PDFs into mock tests?",
-    answer: "Our intelligent ingestion engine scans your uploaded coaching modules, extracts individual MCQs, mathematical equations, and diagrams, and structures them into a standard NTA CBT-style practice environment."
+    answer: "Our neural ingestion engine parses uploaded coaching modules, extracts individual MCQs, LaTeX math equations, and diagrams, and maps them directly into an NTA-compliant CBT practice environment."
   },
   {
-    id: 2,
+    num: "02",
     question: "Is the scoring pattern strictly aligned with NEET NTA guidelines?",
-    answer: "Yes, every test operates on the exact official NEET marking protocol (+4 marks for correct answers, -1 mark for incorrect attempts, and 0 for unattempted questions) with integrated 03:20:00 duration pressure."
+    answer: "Yes, every mock operates on the exact official NEET marking protocol: +4 for correct, -1 penalty for incorrect, and 0 for unattempted questions with an active 03:20:00 exam countdown."
   },
   {
-    id: 3,
+    num: "03",
     question: "Can I practice chapter-wise questions or only full-length mocks?",
-    answer: "You get complete flexibility. Practice chapter-wise high-yield MCQs across Physics, Chemistry, and Biology, or sit for comprehensive full-syllabus mock simulations."
+    answer: "Full flexibility. Drill chapter-wise high-yield question vaults across Physics, Chemistry, and Biology, or sit for rigorous full-syllabus simulations."
   },
   {
-    id: 4,
+    num: "04",
     question: "Do I get detailed solutions and post-test analytics?",
-    answer: "Immediately after submission, you receive an in-depth performance breakdown including chapter-level accuracy, time spent per question, negative marks analysis, and step-by-step NCERT-verified explanations."
+    answer: "Instantly on submission. You get comprehensive heatmaps, chapter-level accuracy curves, time-drain audits per question, and step-by-step NCERT-verified solutions."
   },
   {
-    id: 5,
+    num: "05",
     question: "Is Neogravix accessible on both mobile and desktop?",
-    answer: "Yes, the platform is fully responsive. You can solve quick MCQ drills on your phone while commuting or sit for full-length desktop CBT simulations to mimic real exam-hall ergonomics."
+    answer: "Fully responsive. Run rapid-fire MCQ drills on mobile while on the move, or switch to desktop for full CBT hall ergonomics."
   }
 ];
 
 export default function FAQSection() {
-  const [openIndex, setOpenIndex] = useState(null);
+  const [openIndex, setOpenIndex] = useState(0); // Pehla wala open rakho by default for dynamic feel
 
   const toggleFAQ = (index) => {
     setOpenIndex(openIndex === index ? null : index);
   };
 
   return (
-    <section className="faq-wrapper">
-      {/* Background Radial Glow */}
-      <div className="faq-ambient-glow" />
+    <section className="vibe-faq-wrapper">
+      {/* Dynamic Background Lighting */}
+      <div className="vibe-faq-glow-blue" />
+      <div className="vibe-faq-glow-cyan" />
 
-      <div className="faq-container">
+      <div className="vibe-faq-container">
         {/* Header */}
-        <div className="faq-header">
-          <div className="faq-badge">
-            <HelpCircle size={14} />
-            <span>Got Questions?</span>
+        <div className="vibe-faq-header">
+          <div className="vibe-pill-badge">
+            <Sparkles size={13} className="vibe-sparkle" />
+            <span>Clear Doubts • Level Up</span>
           </div>
-          <h2 className="faq-title">
-            Frequently Asked <span className="gradient-text">Questions</span>
+
+          <h2 className="vibe-title">
+            Frequently Asked <span className="vibe-gradient-text">Questions</span>
           </h2>
-          <p className="faq-subtitle">
-            Everything you need to know about preparing with Neogravix.
+          <p className="vibe-subtitle">
+            Zero ambiguity. Everything you need to know about preparing with Neogravix.
           </p>
         </div>
 
-        {/* Accordion List */}
-        <div className="faq-list">
+        {/* Dynamic Accordion */}
+        <div className="vibe-faq-list">
           {faqsData.map((item, index) => {
             const isOpen = openIndex === index;
             return (
               <div 
-                key={item.id} 
-                className={`faq-card ${isOpen ? 'active' : ''}`}
+                key={item.num} 
+                className={`vibe-card ${isOpen ? 'is-open' : ''}`}
                 onClick={() => toggleFAQ(index)}
               >
-                <div className="faq-question-row">
-                  <span className="faq-question-text">{item.question}</span>
-                  <div className={`faq-chevron ${isOpen ? 'rotate' : ''}`}>
-                    <ChevronDown size={18} />
-                  </div>
-                </div>
+                <div className="vibe-card-inner">
+                  <div className="vibe-header-row">
+                    <div className="vibe-left-meta">
+                      <span className="vibe-num">{item.num}</span>
+                      <h3 className="vibe-question">{item.question}</h3>
+                    </div>
 
-                <div className={`faq-answer-drawer ${isOpen ? 'expanded' : ''}`}>
-                  <div className="faq-answer-inner">
-                    <p>{item.answer}</p>
+                    <div className={`vibe-toggle-btn ${isOpen ? 'rotate' : ''}`}>
+                      <Plus size={18} />
+                    </div>
+                  </div>
+
+                  <div className={`vibe-drawer ${isOpen ? 'expanded' : ''}`}>
+                    <div className="vibe-answer-content">
+                      <p>{item.answer}</p>
+                    </div>
                   </div>
                 </div>
               </div>
