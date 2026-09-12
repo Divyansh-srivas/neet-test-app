@@ -7,6 +7,7 @@ import logoImg from '../assets/logo.jpg'
 import FeaturesBento from '../components/FeaturesBento.jsx'
 import SpamNoticeModal from '../components/SpamNoticeModal.jsx'
 import FAQSection from '../components/FAQSection.jsx'
+import Footer from '../components/Footer.jsx'
 
 export default function AuthPage({ forceSetPassword }) {
   const { user, signUpWithPassword, loginWithPassword, resendVerification, setPassword, resetPassword } = useAuth()
@@ -518,6 +519,11 @@ export default function AuthPage({ forceSetPassword }) {
       {/* FAQ Section */}
       <div style={{ position: 'relative', zIndex: 10 }}>
         <FAQSection />
+      </div>
+
+      {/* Footer Section */}
+      <div style={{ position: 'relative', zIndex: 10 }}>
+        <Footer />
       </div>
 
       <a href="mailto:Neogravix@gmail.com?subject=Support%20Request%3A%20Neogravix&body=Please%20describe%20your%20issue%20below%3A%0A%0A" 
