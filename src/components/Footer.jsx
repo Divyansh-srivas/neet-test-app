@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Mail, Phone, ShieldCheck, Heart } from 'lucide-react';
+import LegalModal from './LegalModal.jsx';
 import './footer.css';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+  const [activeLegalType, setActiveLegalType] = useState(null);
 
   return (
     <footer className="neogravix-footer">
@@ -39,9 +41,9 @@ export default function Footer() {
           </div>
 
           <div className="footer-links">
-            <a href="#terms" className="f-link">Terms of Service</a>
-            <a href="#privacy" className="f-link">Privacy Policy</a>
-            <a href="#refund" className="f-link">Refund Policy</a>
+            <a href="#terms" className="f-link" onClick={(e) => { e.preventDefault(); setActiveLegalType('terms'); }}>Terms of Service</a>
+            <a href="#privacy" className="f-link" onClick={(e) => { e.preventDefault(); setActiveLegalType('privacy'); }}>Privacy Policy</a>
+            <a href="#refund" className="f-link" onClick={(e) => { e.preventDefault(); setActiveLegalType('refund'); }}>Refund Policy</a>
             <a href="mailto:Neogravix@gmail.com" className="f-link">Contact Support</a>
           </div>
 
@@ -52,6 +54,9 @@ export default function Footer() {
         </div>
 
       </div>
+      
+      {/* Legal Modal */}
+      <LegalModal activeType={activeLegalType} onClose={() => setActiveLegalType(null)} />
     </footer>
   );
 }
