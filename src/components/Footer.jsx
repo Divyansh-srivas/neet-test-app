@@ -41,14 +41,70 @@ export default function Footer() {
 
             <div className="contact-divider" />
 
-            {/* Instagram Profile */}
+            {/* Official Real Instagram App Icon */}
             <a 
               href="https://www.instagram.com/neogravix?stkn=MWI1Z3VwNGNuMXEyeQ%3D%3D&utm_source=qr" 
               target="_blank" 
               rel="noopener noreferrer" 
               className="contact-item hover-link social-link-instagram"
             >
-              <Instagram className="contact-icon instagram-icon" size={15} />
+              <svg 
+                className="insta-real-badge" 
+                viewBox="0 0 24 24" 
+                width="17" 
+                height="17"
+              >
+                <defs>
+                  {/* Official Multi-stop Instagram Radial & Linear Blend */}
+                  <radialGradient id="instaRealGlow" cx="20%" cy="105%" r="115%">
+                    <stop offset="0%" stopColor="#fdf497" />
+                    <stop offset="10%" stopColor="#fdf497" />
+                    <stop offset="45%" stopColor="#fd5949" />
+                    <stop offset="60%" stopColor="#d6249f" />
+                    <stop offset="90%" stopColor="#285AEB" />
+                  </radialGradient>
+                </defs>
+
+                {/* Solid Gradient App Icon Tile */}
+                <rect 
+                  x="1.5" 
+                  y="1.5" 
+                  width="21" 
+                  height="21" 
+                  rx="6" 
+                  fill="url(#instaRealGlow)" 
+                />
+
+                {/* Official White Camera Contour */}
+                <rect 
+                  x="5.5" 
+                  y="5.5" 
+                  width="13" 
+                  height="13" 
+                  rx="3.6" 
+                  fill="none" 
+                  stroke="#ffffff" 
+                  strokeWidth="1.6" 
+                />
+
+                {/* Center Camera Lens */}
+                <circle 
+                  cx="12" 
+                  cy="12" 
+                  r="3.2" 
+                  fill="none" 
+                  stroke="#ffffff" 
+                  strokeWidth="1.6" 
+                />
+
+                {/* Flash Dot */}
+                <circle 
+                  cx="15.8" 
+                  cy="8.2" 
+                  r="0.9" 
+                  fill="#ffffff" 
+                />
+              </svg>
               <span>@neogravix</span>
             </a>
 
