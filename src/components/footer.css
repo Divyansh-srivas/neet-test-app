@@ -132,6 +132,16 @@
   fill: #f43f5e;
 }
 
+.hover-link {
+  text-decoration: none;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.hover-link:hover {
+  color: #60a5fa;
+  transform: translateY(-1px);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .footer-contact-bar {
