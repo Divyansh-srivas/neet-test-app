@@ -147,6 +147,22 @@
   transform: translateY(-1px);
 }
 
+/* Telegram Specific Accent */
+.telegram-icon {
+  color: #38bdf8;
+}
+.social-link-telegram:hover {
+  color: #38bdf8 !important;
+}
+
+/* Instagram Specific Accent */
+.instagram-icon {
+  color: #f43f5e;
+}
+.social-link-instagram:hover {
+  color: #f43f5e !important;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .footer-contact-bar {
