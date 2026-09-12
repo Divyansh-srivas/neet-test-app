@@ -155,12 +155,23 @@
   color: #38bdf8 !important;
 }
 
-/* Instagram Specific Accent */
-.instagram-icon {
-  color: #f43f5e;
+/* Official Real Instagram App Tile Styling */
+.insta-real-badge {
+  border-radius: 5px;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(214, 36, 159, 0.35);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
 }
-.social-link-instagram:hover {
-  color: #f43f5e !important;
+
+.social-link-instagram:hover .insta-real-badge {
+  transform: translateY(-2px) scale(1.1);
+  box-shadow: 0 4px 16px rgba(253, 89, 73, 0.6), 0 0 24px rgba(214, 36, 159, 0.45);
+}
+
+.social-link-instagram:hover span {
+  color: #f43f5e;
 }
 
 /* Responsive adjustments */
