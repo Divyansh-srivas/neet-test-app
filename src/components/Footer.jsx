@@ -21,13 +21,6 @@ export default function Footer() {
 
             <div className="contact-divider" />
 
-            <a href="tel:+918528539952" className="contact-item hover-link">
-              <Phone className="contact-icon" size={16} />
-              <span>+91 85285 39952</span>
-            </a>
-
-            <div className="contact-divider" />
-
             {/* Telegram Channel */}
             <a 
               href="https://t.me/neogravix" 
