@@ -13,7 +13,7 @@ export const createAiWorker = (io) => {
         try {
             await supabase.from('jobs').update({ status: 'processing' }).eq('id', jobId);
             
-            const CHUNK_SIZE = 3;
+            const CHUNK_SIZE = 2;
             let chunkTasks = [];
             
             for (let i = 0; i < totalPages; i += CHUNK_SIZE) {
@@ -25,7 +25,7 @@ export const createAiWorker = (io) => {
             let extractedCount = 0;
             let allExtractedRaw = [];
             
-            const CONCURRENCY_LIMIT = 2; // Paid Tier - balanced speed
+            const CONCURRENCY_LIMIT = 1; // Sequential - proven to work
             
             for (let i = 0; i < chunkTasks.length; i += CONCURRENCY_LIMIT) {
                 const batch = chunkTasks.slice(i, i + CONCURRENCY_LIMIT);
