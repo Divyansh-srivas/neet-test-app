@@ -64,7 +64,7 @@ const legalContent = {
       },
       {
         heading: "3. Dispute & Support Window",
-        body: "For billing queries, subscription issues, or transaction clarifications, students can contact our dedicated helpdesk directly at Neogravix@gmail.com or call +91 85285 39952 within 7 days of purchase."
+        body: "For billing queries, subscription issues, or transaction clarifications, students can contact our dedicated helpdesk directly at Neogravix@gmail.com within 7 days of purchase."
       }
     ]
   }
