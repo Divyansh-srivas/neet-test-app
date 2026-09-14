@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 // Initialize Firebase Admin — project ID read from env so it works across environments
 if (!getApps().length) {
   initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || 'neogravix-v2'
+    projectId: process.env.FIREBASE_PROJECT_ID || 'neogravix-22a21'
   });
 }
 
