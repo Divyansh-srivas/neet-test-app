@@ -6,7 +6,12 @@ let ioInstance = null;
 export const initSocket = (server) => {
     const io = new Server(server, {
         cors: {
-            origin: '*',
+            origin: [
+                'http://localhost:5173', 
+                'https://neogravix.in', 
+                'https://www.neogravix.in', 
+                'https://neogravix.vercel.app'
+            ],
             methods: ['GET', 'POST']
         }
     });

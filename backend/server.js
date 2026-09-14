@@ -19,7 +19,21 @@ const io = initSocket(server);
 
 // Security Middlewares
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors({ origin: '*' }));
+const allowedOrigins = [
+    'http://localhost:5173', 
+    'https://neogravix.in', 
+    'https://www.neogravix.in', 
+    'https://neogravix.vercel.app'
+];
+app.use(cors({ 
+    origin: function(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    } 
+}));
 
 // Optimization & Logging
 app.use(compression());
