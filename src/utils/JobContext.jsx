@@ -25,10 +25,14 @@ export function JobProvider({ children }) {
       newSocket.emit('join', user.uid);
     });
 
+    if (newSocket.connected) {
+      newSocket.emit('join', user.uid);
+    }
+
     newSocket.on('job-started', (data) => {
         setActiveJobs(prev => ({
             ...prev,
-            [data.jobId]: { status: 'processing', progress: 0 }
+            [data.jobId]: { ...prev[data.jobId], status: 'processing', progress: prev[data.jobId]?.progress || 0 }
         }));
     });
 
@@ -56,7 +60,6 @@ export function JobProvider({ children }) {
                 createdAt: Date.now(),
                 completed: false
             });
-            // Force a small delay then reload so the Dashboard picks up the new test from localStorage
             setTimeout(() => {
                 window.dispatchEvent(new Event('storage'));
             }, 500);
@@ -69,7 +72,6 @@ export function JobProvider({ children }) {
     });
 
     newSocket.on('job-failed', (data) => {
-        // Ideally data includes jobId, if not we mark the active one as failed
         if (data.jobId) {
             setActiveJobs(prev => ({
                 ...prev,
@@ -82,10 +84,18 @@ export function JobProvider({ children }) {
 
     setSocket(newSocket);
 
-    // Fetch existing active jobs from backend via API
-    fetchExistingJobs(user.uid);
+    // Fetch existing active jobs from backend via API on mount
+    fetchExistingJobs();
 
-    return () => newSocket.disconnect();
+    // 3-second Polling fallback for guaranteed UI updates even without WebSockets
+    const pollInterval = setInterval(() => {
+        fetchExistingJobs();
+    }, 3000);
+
+    return () => {
+        clearInterval(pollInterval);
+        newSocket.disconnect();
+    };
   }, [user]);
 
   const fetchExistingJobs = async () => {
@@ -94,19 +104,36 @@ export function JobProvider({ children }) {
           if (!res.ok) return;
           const data = await res.json();
           if (data.jobs) {
-              const active = {};
-              data.jobs.forEach(job => {
-                  if (job.status === 'processing' || job.status === 'queued') {
-                      active[job.id] = {
-                          status: job.status,
-                          progress: job.progress || 0,
-                          pagesCompleted: job.pages_completed || 0,
-                          totalPages: job.total_pages || 0,
-                          questionsExtracted: job.extracted_questions || 0
-                      };
-                  }
+              setActiveJobs(prev => {
+                  const updated = { ...prev };
+                  data.jobs.forEach(job => {
+                      if (job.status === 'processing' || job.status === 'queued') {
+                          updated[job.id] = {
+                              status: job.status,
+                              progress: job.progress || 0,
+                              pagesCompleted: job.pages_completed || 0,
+                              totalPages: job.total_pages || 0,
+                              questionsExtracted: job.extracted_questions || 0
+                          };
+                      } else if (job.status === 'failed') {
+                          if (updated[job.id] && updated[job.id].status !== 'failed') {
+                              updated[job.id] = {
+                                  status: 'failed',
+                                  error: job.error_message || 'Extraction failed'
+                              };
+                          }
+                      } else if (job.status === 'completed') {
+                          if (updated[job.id] && updated[job.id].status !== 'completed') {
+                              updated[job.id] = {
+                                  ...updated[job.id],
+                                  status: 'completed',
+                                  progress: 100
+                              };
+                          }
+                      }
+                  });
+                  return updated;
               });
-              setActiveJobs(active);
           }
       } catch (e) {
           console.error("Failed to fetch jobs", e);

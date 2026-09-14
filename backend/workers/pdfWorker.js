@@ -26,7 +26,15 @@ export const createPdfWorker = (io) => {
             
             const totalPages = await getTotalPages(filePath);
             
-            await supabase.from('jobs').update({ total_pages: totalPages, status: 'processing' }).eq('id', job.id);
+            await supabase.from('jobs').update({ total_pages: totalPages, status: 'processing', progress: 10 }).eq('id', job.id);
+            
+            io.to(userId).emit('job-progress', { 
+                jobId: job.id, 
+                progress: 10, 
+                pagesCompleted: 0, 
+                totalPages,
+                questionsExtracted: 0 
+            });
             
             // Queue up AI extraction job
             await queues.aiExtraction.add('extract-pdf', {

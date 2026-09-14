@@ -33,6 +33,18 @@ export const createAiWorker = (io) => {
                 const batchResults = await Promise.all(batch.map(async (chunk) => {
                     const { startPage, endPage } = chunk;
                     
+                    // Emit progress BEFORE starting extraction so user knows it's actively working on current chunk
+                    const currentProgress = Math.round((completedChunks / chunkTasks.length) * 60) + 10;
+                    const pagesDone = Math.min(completedChunks * CHUNK_SIZE, totalPages);
+                    
+                    io.to(userId).emit('job-progress', { 
+                        jobId, 
+                        progress: currentProgress, 
+                        pagesCompleted: pagesDone, 
+                        totalPages,
+                        questionsExtracted: extractedCount 
+                    });
+
                     const chunkBase64 = await splitPdfIntoChunk(filePath, startPage, endPage);
                     const rawQuestions = await extractQuestionsFromChunk(chunkBase64);
                     
@@ -46,13 +58,20 @@ export const createAiWorker = (io) => {
                     completedChunks++;
                     extractedCount += adjustedQuestions.length;
                     
-                    const progress = Math.round((completedChunks / chunkTasks.length) * 70); 
-                    const pagesCompleted = Math.round((completedChunks / chunkTasks.length) * totalPages);
+                    const updatedProgress = Math.round((completedChunks / chunkTasks.length) * 60) + 10;
+                    const updatedPagesDone = Math.min(completedChunks * CHUNK_SIZE, totalPages);
                     
+                    // Update database immediately for HTTP polling fallback
+                    await supabase.from('jobs').update({ 
+                        progress: updatedProgress, 
+                        pages_completed: updatedPagesDone,
+                        extracted_questions: extractedCount
+                    }).eq('id', jobId);
+
                     io.to(userId).emit('job-progress', { 
                         jobId, 
-                        progress, 
-                        pagesCompleted, 
+                        progress: updatedProgress, 
+                        pagesCompleted: updatedPagesDone, 
                         totalPages,
                         questionsExtracted: extractedCount 
                     });
