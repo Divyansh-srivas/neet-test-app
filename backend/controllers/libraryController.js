@@ -1,11 +1,11 @@
-import { supabase } from '../config/supabase.js';
+import { supabaseAdmin } from '../config/supabase.js';
 
 export const getStudyMaterials = async (req, res) => {
     try {
         const { subject } = req.params;
         
         // Fetch from Supabase
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('study_materials')
             .select('*')
             .eq('subject', subject.toLowerCase())
