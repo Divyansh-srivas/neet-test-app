@@ -95,7 +95,7 @@ CRITICAL INSTRUCTIONS:
         while(retries > 0 && !success) {
             try {
                 response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-3.6-flash',
                     contents: [{ inlineData: { data: chunkBase64, mimeType: 'application/pdf' } }, prompt],
                     config: { responseMimeType: 'application/json' }
                 });
