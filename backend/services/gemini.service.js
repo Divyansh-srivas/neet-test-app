@@ -44,7 +44,7 @@ CRITICAL INSTRUCTIONS:
             const isTransientError = !isQuotaError && (e.status === 429 || e.status === 503 || e.status === 500 || e.status === 504 || e.message?.includes('429') || e.message?.includes('503'));
             
             if (isTransientError) {
-                const backoffDelay = (9 - retries) * 8000; // 8s, 16s, 24s...
+                const backoffDelay = (9 - retries) * 3000; // 3s, 6s, 9s...
                 logger.warn(`Gemini API Error (${e.status}). Retrying in ${backoffDelay/1000}s... (${retries - 1} retries left)`);
                 await delay(backoffDelay);
                 retries--;
