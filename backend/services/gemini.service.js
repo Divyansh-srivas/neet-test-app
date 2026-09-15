@@ -23,8 +23,18 @@ export function robustParseQuestions(rawText) {
         console.error('[PARSE FAILED ON STRING]:', cleanedText.slice(0, 300));
         console.error('[PARSE ERROR REASON]:', e1.message);
 
-        // Try extracting innermost JSON array or object via regex
-        const jsonMatch = cleanedText.match(/\[\s*\{[\s\S]*\}\s*\]/) || cleanedText.match(/\{\s*"questions"[\s\S]*\}/);
+        // Try extracting JSON object with questions array
+        const questionsObjMatch = cleanedText.match(/\{\s*"questions"\s*:\s*(\[\s*\{[\s\S]*\}\s*\])\s*\}/i);
+        if (questionsObjMatch && questionsObjMatch[1]) {
+            try {
+                const arrayParsed = JSON.parse(questionsObjMatch[1]);
+                console.log('[DEBUG] Fallback regex questions object parsed:', arrayParsed.length);
+                return arrayParsed;
+            } catch (e) {}
+        }
+
+        // Try extracting JSON array
+        const jsonMatch = cleanedText.match(/\[\s*\{[\s\S]*\}\s*\]/);
         if (jsonMatch) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]);
@@ -45,24 +55,44 @@ export function normalizeQuestions(rawQuestions) {
         const qNum = q.questionNumber || q.qNum || q.qNumber || q.id || (idx + 1);
         const qText = q.questionText || q.question || q.text || "Question text unavailable";
         
+        let optionsArray = [];
         let optionsObj = {};
+
         if (Array.isArray(q.options)) {
-            q.options.forEach(opt => {
+            optionsArray = q.options.map(opt => {
                 if (typeof opt === 'string') {
                     const key = opt.charAt(0).toUpperCase();
-                    optionsObj[key] = opt.slice(1).replace(/^[\.\:\)\s]+/, '').trim();
+                    const text = opt.slice(1).replace(/^[\.\:\)\s]+/, '').trim();
+                    optionsObj[key] = text;
+                    return { id: key, text };
                 } else if (opt && (opt.id || opt.key)) {
-                    optionsObj[opt.id || opt.key] = opt.text || opt.value || '';
+                    const key = (opt.id || opt.key).toString().toUpperCase();
+                    const text = opt.text || opt.value || '';
+                    optionsObj[key] = text;
+                    return { id: key, text };
                 }
+                return opt;
             });
         } else if (typeof q.options === 'object' && q.options !== null) {
             optionsObj = q.options;
+            optionsArray = Object.entries(q.options).map(([key, val]) => ({ id: key, text: val }));
         }
 
-        if (!optionsObj.A) optionsObj.A = 'Option A';
-        if (!optionsObj.B) optionsObj.B = 'Option B';
-        if (!optionsObj.C) optionsObj.C = 'Option C';
-        if (!optionsObj.D) optionsObj.D = 'Option D';
+        if (!optionsObj.A) { optionsObj.A = 'Option A'; }
+        if (!optionsObj.B) { optionsObj.B = 'Option B'; }
+        if (!optionsObj.C) { optionsObj.C = 'Option C'; }
+        if (!optionsObj.D) { optionsObj.D = 'Option D'; }
+
+        const correctAnswer = (q.correctAnswer || q.correct || q.answer || 'A').toString().toUpperCase().trim();
+        const hasDiagram = !!(q.hasDiagram || q.diagramBox || q.imageBox || q.diagramUrl);
+
+        let imageBox = q.imageBox || null;
+        if (!imageBox && q.diagramBox && q.diagramBox.ymin !== undefined) {
+            imageBox = {
+                page: 1,
+                box: [q.diagramBox.ymin, q.diagramBox.xmin, q.diagramBox.ymax, q.diagramBox.xmax]
+            };
+        }
 
         return {
             questionNumber: qNum,
@@ -70,11 +100,13 @@ export function normalizeQuestions(rawQuestions) {
             questionText: qText,
             question: qText,
             options: optionsObj,
-            correctAnswer: (q.correctAnswer || q.correct || q.answer || 'A').toString().toUpperCase().trim(),
-            correct: (q.correctAnswer || q.correct || q.answer || 'A').toString().toUpperCase().trim(),
+            optionsList: optionsArray,
+            correctAnswer: correctAnswer,
+            correct: correctAnswer,
+            hasDiagram: hasDiagram,
+            diagramBox: q.diagramBox || null,
             diagramUrl: q.diagramUrl || q.image || null,
-            imageBox: q.imageBox || null,
-            hasDiagram: q.hasDiagram || !!q.imageBox,
+            imageBox: imageBox,
             explanation: q.explanation || null,
             subject: q.subject || 'Physics',
             chapter: q.chapter || 'Uncategorized',
@@ -84,21 +116,19 @@ export function normalizeQuestions(rawQuestions) {
 }
 
 export const extractQuestionsFromChunk = async (pdfBase64, textContent = '') => {
-    const prompt = `You are an expert NEET and Indian Coaching Exam Question Extractor (Physics, Chemistry, Biology, Mathematics).
-Extract EVERY SINGLE Multiple Choice Question (MCQ) from the provided content with 100% precision.
+    const prompt = `You are an expert NTA NEET exam digitizer and question extractor. Analyze this page content and extract EVERY single MCQ.
 
-MANDATORY EXTRACTION INSTRUCTIONS:
-1. QUESTION NUMBERS: Coaching papers use varied formats like "1.", "Q.1", "[1]", "Question 1:", "(1)", or bold numbers. Extract the numerical ID into "questionNumber".
-2. TEXT & LATEX EQUATIONS: Preserve all question text, chemical equations, physics formulas, and mathematical notation (using LaTeX $...$ or standard math symbols).
-3. OPTIONS: Options may appear as "(1), (2), (3), (4)", "(a), (b), (c), (d)", "A.", "B.", or in multi-column tables.
-   - CRITICAL: You MUST normalize option identifiers strictly to "A", "B", "C", "D" even if original paper uses 1, 2, 3, 4 or a, b, c, d.
-4. DIAGRAMS & FIGURES: If a question contains ANY diagram, table, graph, chemical structure, biology figure, circuit, or physics diagram:
-   - Set "hasDiagram": true
-   - Set "imageBox": { "page": 1, "box": [ymin, xmin, ymax, xmax] } where page is 1-indexed for THIS page/chunk and box coordinates are [ymin, xmin, ymax, xmax] normalized to scale 0-1000.
-5. ANSWER KEYS & EXPLANATIONS: If an answer key or explanation is missing, set "correctAnswer" to "A" (or best deduction) and "explanation" to null.
-6. SUBJECT & CHAPTER: Categorize into Physics, Chemistry, Biology, or Mathematics based on question topic.
+MANDATORY RULES:
+1. Extract ALL questions, even if diagram-based, multi-column, table-based, or handwritten.
+2. NORMALIZE OPTIONS: Normalize option identifiers strictly to an array of 4 objects with IDs: "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
+3. LATEX FORMULAS: Retain LaTeX for mathematical terms, physics formulas, and chemical equations ($...$ or $$...$$).
+4. DIAGRAMS & FIGURES: For NEET Physics (circuits, ray diagrams), Chemistry (structural formulas, graphs), and Biology (anatomy diagrams):
+   - Set "hasDiagram": true if a figure, graph, or diagram exists for this question.
+   - Return normalized bounding box coordinates in "diagramBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000).
+   - Also include "imageBox": { "page": 1, "box": [ymin, xmin, ymax, xmax] } for backward compatibility.
+5. ANSWER KEYS: If answer key or explanation is missing, extract question & options anyway, setting "correctAnswer": "A" (or best deduction) and "explanation": null.
 
-MANDATORY OUTPUT FORMAT: Return ONLY a valid JSON object matching this exact schema:
+MANDATORY JSON OUTPUT SCHEMA: Provide valid JSON strictly matching this schema. No markdown backticks outside JSON. No conversational chatter.
 {
   "questions": [
     {
@@ -107,6 +137,8 @@ MANDATORY OUTPUT FORMAT: Return ONLY a valid JSON object matching this exact sch
       "chapter": "Kinematics",
       "questionText": "Full question text",
       "hasDiagram": false,
+      "diagramBox": null,
+      "diagramUrl": null,
       "imageBox": null,
       "options": [
         { "id": "A", "text": "Option A text" },
