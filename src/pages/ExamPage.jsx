@@ -584,10 +584,10 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
                   </div>
                 </div>
               )}
-              {q.imageBox && test.pdfUrl && (
+              {q.imageBox && (q.pdfUrl || test.pdfUrl || test.pdf_url) && (
                 <div style={{ marginTop: 20, textAlign: 'center' }}>
                     <PdfImageCropper 
-                        pdfUrl={test.pdfUrl} 
+                        pdfUrl={q.pdfUrl || test.pdfUrl || test.pdf_url} 
                         pageNum={q.imageBox.page} 
                         box={q.imageBox.box} 
                     />

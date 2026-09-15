@@ -39,16 +39,27 @@ export const createSaveWorker = (io) => {
                 }
             }
 
+            let pdfUrl = null;
+            if (storagePath) {
+                const { data: signedData, error: signedError } = await supabase.storage.from('uploads').createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+                if (signedData && signedData.signedUrl) {
+                    pdfUrl = signedData.signedUrl;
+                } else {
+                    pdfUrl = `${config.SUPABASE_URL || 'https://rtngewpxtuayymmldmsu.supabase.co'}/storage/v1/object/public/uploads/${storagePath}`;
+                }
+            }
+
+            const questionsWithPdf = questions.map(q => ({
+                ...q,
+                pdfUrl: pdfUrl
+            }));
+
             // Create the Test object in Supabase
-            // We need to fetch the teacher's profile first, or if student, they can create tests? 
-            // In the DB schema, tests have `teacher_id`. Assuming the user is a teacher.
-            // If they are a student, RLS might block it. Let's use supabaseAdmin to create the test for them.
-            
             const { data: testRecord, error: testErr } = await supabaseAdmin.from('tests').insert({
                 teacher_id: userId,
                 name: testName || 'AI Extracted Test',
-                questions: questions, // store full JSON for backward compatibility with frontend
-                total_questions: questions.length,
+                questions: questionsWithPdf,
+                total_questions: questionsWithPdf.length,
                 is_published: true
             }).select().single();
 
@@ -61,28 +72,18 @@ export const createSaveWorker = (io) => {
             await supabase.from('jobs').update({ 
                 status: 'completed', 
                 progress: 100,
-                extracted_questions: questions.length,
+                extracted_questions: questionsWithPdf.length,
                 extracted_images: extractedImagesCount,
                 test_id: finalTestId,
                 completed_at: new Date().toISOString()
             }).eq('id', jobId);
-
-            let pdfUrl = null;
-            if (storagePath) {
-                const { data: signedData, error: signedError } = await supabase.storage.from('uploads').createSignedUrl(storagePath, 60 * 60 * 24 * 365);
-                if (signedData && signedData.signedUrl) {
-                    pdfUrl = signedData.signedUrl;
-                } else {
-                    pdfUrl = `${config.SUPABASE_URL || 'https://rtngewpxtuayymmldmsu.supabase.co'}/storage/v1/object/public/uploads/${storagePath}`;
-                }
-            }
 
             io.to(userId).emit('job-completed', { 
                 jobId, 
                 testId: finalTestId,
                 testName,
                 duration,
-                questions,
+                questions: questionsWithPdf,
                 pdfUrl
             });
             logger.info(`Job ${jobId} completed successfully.`);
