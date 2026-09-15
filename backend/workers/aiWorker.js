@@ -94,9 +94,11 @@ export const createAiWorker = (io) => {
             console.log(`[DEBUG] Extraction finished across ${totalPages} pages. Total questions recovered:`, allExtractedRaw.length);
             
             if (allExtractedRaw.length === 0) {
-                console.log(`[DEBUG] Final total of all questions across document is strictly 0. File: ${filePath}`);
-                logger.error(`[DEBUG] Extraction completed with 0 questions across ${totalPages} pages.`);
-                throw new Error('No questions could be extracted from this PDF. Please verify PDF format.');
+                const debugInfo = `TotalPages: ${totalPages}, ChunksProcessed: ${completedChunks}/${chunkTasks.length}`;
+                const realErrorMsg = `Extraction yielded 0 questions (${debugInfo}). Please verify PDF content or format.`;
+                console.error(`[CRITICAL ERROR] ${realErrorMsg}`);
+                logger.error(`[DEBUG] ${realErrorMsg}`);
+                throw new Error(realErrorMsg);
             }
             
             await supabase.from('jobs').update({ 

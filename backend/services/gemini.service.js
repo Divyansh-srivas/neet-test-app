@@ -6,6 +6,83 @@ const ai = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+export function robustParseQuestions(rawText) {
+    if (!rawText) return [];
+    if (typeof rawText !== 'string') {
+        if (Array.isArray(rawText)) return rawText;
+        if (rawText && Array.isArray(rawText.questions)) return rawText.questions;
+        return [];
+    }
+    
+    const cleanedText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    
+    try {
+        const parsed = JSON.parse(cleanedText);
+        return Array.isArray(parsed) ? parsed : (parsed.questions || []);
+    } catch (e1) {
+        console.error('[PARSE FAILED ON STRING]:', cleanedText.slice(0, 300));
+        console.error('[PARSE ERROR REASON]:', e1.message);
+
+        // Try extracting innermost JSON array or object via regex
+        const jsonMatch = cleanedText.match(/\[\s*\{[\s\S]*\}\s*\]/) || cleanedText.match(/\{\s*"questions"[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                console.log('[DEBUG] Regex parse fallback succeeded:', Array.isArray(parsed) ? parsed.length : (parsed.questions?.length || 0));
+                return Array.isArray(parsed) ? parsed : (parsed.questions || []);
+            } catch (e2) {
+                console.error('Regex parse fallback failed:', e2.message);
+            }
+        }
+    }
+    return [];
+}
+
+export function normalizeQuestions(rawQuestions) {
+    if (!Array.isArray(rawQuestions)) return [];
+    
+    return rawQuestions.map((q, idx) => {
+        const qNum = q.questionNumber || q.qNum || q.qNumber || q.id || (idx + 1);
+        const qText = q.questionText || q.question || q.text || "Question text unavailable";
+        
+        let optionsObj = {};
+        if (Array.isArray(q.options)) {
+            q.options.forEach(opt => {
+                if (typeof opt === 'string') {
+                    const key = opt.charAt(0).toUpperCase();
+                    optionsObj[key] = opt.slice(1).replace(/^[\.\:\)\s]+/, '').trim();
+                } else if (opt && (opt.id || opt.key)) {
+                    optionsObj[opt.id || opt.key] = opt.text || opt.value || '';
+                }
+            });
+        } else if (typeof q.options === 'object' && q.options !== null) {
+            optionsObj = q.options;
+        }
+
+        if (!optionsObj.A) optionsObj.A = 'Option A';
+        if (!optionsObj.B) optionsObj.B = 'Option B';
+        if (!optionsObj.C) optionsObj.C = 'Option C';
+        if (!optionsObj.D) optionsObj.D = 'Option D';
+
+        return {
+            questionNumber: qNum,
+            qNum: qNum,
+            questionText: qText,
+            question: qText,
+            options: optionsObj,
+            correctAnswer: (q.correctAnswer || q.correct || q.answer || 'A').toString().toUpperCase().trim(),
+            correct: (q.correctAnswer || q.correct || q.answer || 'A').toString().toUpperCase().trim(),
+            diagramUrl: q.diagramUrl || q.image || null,
+            imageBox: q.imageBox || null,
+            hasDiagram: q.hasDiagram || !!q.imageBox,
+            explanation: q.explanation || null,
+            subject: q.subject || 'Physics',
+            chapter: q.chapter || 'Uncategorized',
+            difficulty: q.difficulty || 'Medium'
+        };
+    });
+}
+
 export const extractQuestionsFromChunk = async (pdfBase64, textContent = '') => {
     const prompt = `You are an expert NEET and Indian Coaching Exam Question Extractor (Physics, Chemistry, Biology, Mathematics).
 Extract EVERY SINGLE Multiple Choice Question (MCQ) from the provided content with 100% precision.
@@ -48,7 +125,6 @@ MANDATORY OUTPUT FORMAT: Return ONLY a valid JSON object matching this exact sch
     let retries = 3;
     let response;
 
-    // Multimodal input: PDF base64 allows Gemini vision to read page images natively
     const contents = textContent && textContent.length > 50
         ? [textContent, prompt]
         : [{ inlineData: { data: pdfBase64, mimeType: 'application/pdf' } }, prompt];
@@ -70,7 +146,6 @@ MANDATORY OUTPUT FORMAT: Return ONLY a valid JSON object matching this exact sch
                 (e.message && (e.message.includes('429') || e.message.includes('RESOURCE_EXHAUSTED') || e.message.includes('503')));
             
             if (isRateLimitOrTransient && retries > 1) {
-                // Exponential backoff: 2s, 4s, 8s
                 const attempt = 4 - retries;
                 const backoffMs = Math.pow(2, attempt) * 1000;
                 logger.warn(`[API WARNING] Rate limit / transient error (${e.status || '429'}). Retrying in ${backoffMs/1000}s... (${retries - 1} retries left)`);
@@ -85,47 +160,11 @@ MANDATORY OUTPUT FORMAT: Return ONLY a valid JSON object matching this exact sch
 
     if (!response || !response.text) return [];
 
-    let rawText = response.text.trim();
-    console.log('[DEBUG] Raw LLM response sample:', rawText.slice(0, 200));
+    const rawText = response.text.trim();
+    console.log('=== RAW LLM RESPONSE START ===');
+    console.log(typeof rawText === 'string' ? rawText.slice(0, 500) : JSON.stringify(rawText).slice(0, 500));
+    console.log('=== RAW LLM RESPONSE END ===');
 
-    // Strip markdown formatting if present
-    rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-
-    try {
-        const parsedData = JSON.parse(rawText);
-        let extractedArray = [];
-
-        if (Array.isArray(parsedData)) {
-            extractedArray = parsedData;
-        } else if (parsedData && Array.isArray(parsedData.questions)) {
-            extractedArray = parsedData.questions;
-        }
-
-        console.log('[DEBUG] Questions parsed from chunk:', extractedArray.length);
-        return extractedArray;
-    } catch (parseErr) {
-        logger.error('[DEBUG] JSON.parse failed. Attempting regex extraction:', parseErr.message);
-
-        // Regex fallback for { "questions": [...] }
-        const questionsObjMatch = rawText.match(/\{\s*"questions"\s*:\s*(\[\s*\{[\s\S]*\}\s*\])\s*\}/i);
-        if (questionsObjMatch && questionsObjMatch[1]) {
-            try {
-                const arrayParsed = JSON.parse(questionsObjMatch[1]);
-                console.log('[DEBUG] Fallback regex questions object parsed:', arrayParsed.length);
-                return arrayParsed;
-            } catch (e) {}
-        }
-
-        // Regex fallback for [...]
-        const arrayMatch = rawText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-        if (arrayMatch) {
-            try {
-                const arrayParsed = JSON.parse(arrayMatch[0]);
-                console.log('[DEBUG] Fallback regex JSON array parsed:', arrayParsed.length);
-                return arrayParsed;
-            } catch (e) {}
-        }
-
-        return [];
-    }
+    const parsedRaw = robustParseQuestions(rawText);
+    return normalizeQuestions(parsedRaw);
 };
