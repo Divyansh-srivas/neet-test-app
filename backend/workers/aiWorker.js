@@ -5,13 +5,15 @@ import { logger } from '../utils/logger.js';
 import { splitPdfIntoChunk } from '../services/pdf.service.js';
 import { extractQuestionsFromChunk } from '../services/gemini.service.js';
 
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const createAiWorker = (io) => {
     return new Worker('ai-extraction', async job => {
         const { jobId, userId, filePath, storagePath, totalPages, token, testName, duration } = job.data;
         const supabase = supabaseAdmin;
         
         try {
-            await supabase.from('jobs').update({ status: 'processing' }).eq('id', jobId);
+            await supabase.from('jobs').update({ status: 'processing', progress: 10 }).eq('id', jobId);
             
             const CHUNK_SIZE = 2;
             let chunkTasks = [];
@@ -22,29 +24,26 @@ export const createAiWorker = (io) => {
             }
             
             let completedChunks = 0;
-            let extractedCount = 0;
             let allExtractedRaw = [];
             
-            const CONCURRENCY_LIMIT = 1; // Sequential - proven to work
+            const CONCURRENCY_LIMIT = 2; // Process 2 chunks concurrently
             
             for (let i = 0; i < chunkTasks.length; i += CONCURRENCY_LIMIT) {
                 const batch = chunkTasks.slice(i, i + CONCURRENCY_LIMIT);
                 
+                const currentPageStart = Math.min(completedChunks * CHUNK_SIZE, totalPages);
+                const currentProgress = Math.min(Math.round((currentPageStart / totalPages) * 60) + 10, 70);
+
+                io.to(userId).emit('job-progress', { 
+                    jobId, 
+                    progress: currentProgress, 
+                    pagesCompleted: currentPageStart, 
+                    totalPages,
+                    questionsExtracted: allExtractedRaw.length 
+                });
+
                 const batchResults = await Promise.all(batch.map(async (chunk) => {
                     const { startPage, endPage } = chunk;
-                    
-                    // Emit progress BEFORE starting extraction so user knows it's actively working on current chunk
-                    const currentProgress = Math.round((completedChunks / chunkTasks.length) * 60) + 10;
-                    const pagesDone = Math.min(completedChunks * CHUNK_SIZE, totalPages);
-                    
-                    io.to(userId).emit('job-progress', { 
-                        jobId, 
-                        progress: currentProgress, 
-                        pagesCompleted: pagesDone, 
-                        totalPages,
-                        questionsExtracted: extractedCount 
-                    });
-
                     try {
                         const chunkBase64 = await splitPdfIntoChunk(filePath, startPage, endPage);
                         const rawQuestions = await extractQuestionsFromChunk(chunkBase64);
@@ -57,47 +56,46 @@ export const createAiWorker = (io) => {
                         });
                         
                         completedChunks++;
-                        extractedCount += adjustedQuestions.length;
-                        
-                        const updatedProgress = Math.round((completedChunks / chunkTasks.length) * 60) + 10;
-                        const updatedPagesDone = Math.min(completedChunks * CHUNK_SIZE, totalPages);
-                        
-                        // Update database immediately for HTTP polling fallback
-                        await supabase.from('jobs').update({ 
-                            progress: updatedProgress, 
-                            pages_completed: updatedPagesDone,
-                            extracted_questions: extractedCount
-                        }).eq('id', jobId);
-
-                        io.to(userId).emit('job-progress', { 
-                            jobId, 
-                            progress: updatedProgress, 
-                            pagesCompleted: updatedPagesDone, 
-                            totalPages,
-                            questionsExtracted: extractedCount 
-                        });
-                        
                         return adjustedQuestions;
-                    } catch(chunkErr) {
-                        logger.error(`Chunk ${startPage}-${endPage} extraction failed: ${chunkErr.message}`);
+                    } catch (chunkErr) {
+                        logger.error(`[WORKER WARNING] Chunk ${startPage}-${endPage} failed: ${chunkErr.message}. Continuing with other pages.`);
                         completedChunks++;
-                        return []; // Proceed gracefully so questions from other chunks are preserved
+                        return []; // Keep questions from other pages!
                     }
                 }));
-                
-                allExtractedRaw.push(...batchResults.flat());
 
-                // 2-second rate limit pacing delay between back-to-back chunks
+                const newQuestions = batchResults.flat();
+                allExtractedRaw.push(...newQuestions);
+
+                const pagesDone = Math.min(completedChunks * CHUNK_SIZE, totalPages);
+                const updatedProgress = Math.min(Math.round((pagesDone / totalPages) * 60) + 10, 70);
+
+                // Monotonic & Persistent State: Update database immediately after EVERY completed batch
+                await supabase.from('jobs').update({ 
+                    progress: updatedProgress, 
+                    pages_completed: pagesDone,
+                    extracted_questions: allExtractedRaw.length
+                }).eq('id', jobId);
+
+                io.to(userId).emit('job-progress', { 
+                    jobId, 
+                    progress: updatedProgress, 
+                    pagesCompleted: pagesDone, 
+                    totalPages,
+                    questionsExtracted: allExtractedRaw.length 
+                });
+
+                // Adaptive Throttling: 1000ms pause between batches to prevent TPM/RPM exhaustion
                 if (i + CONCURRENCY_LIMIT < chunkTasks.length) {
-                    await new Promise(r => setTimeout(r, 2000));
+                    await delay(1000);
                 }
             }
             
-            console.log(`[DEBUG] All chunks completed. Total questions parsed across ${totalPages} pages:`, allExtractedRaw.length);
+            console.log(`[DEBUG] Extraction finished across ${totalPages} pages. Total questions recovered:`, allExtractedRaw.length);
             
             if (allExtractedRaw.length === 0) {
-                console.log(`[DEBUG] Final extracted array is empty ([]). File: ${filePath}`);
-                logger.error(`[DEBUG] Extraction finished with 0 questions across ${totalPages} pages. Possible unreadable image/scanned PDF.`);
+                console.log(`[DEBUG] Final total of all questions across document is strictly 0. File: ${filePath}`);
+                logger.error(`[DEBUG] Extraction completed with 0 questions across ${totalPages} pages.`);
                 throw new Error('No questions could be extracted from this PDF. Please verify PDF format.');
             }
             
