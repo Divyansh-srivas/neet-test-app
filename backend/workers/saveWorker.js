@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { connection } from '../queue/index.js';
+import { getRedisConnection } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { config } from '../config/env.js';
@@ -94,5 +94,5 @@ export const createSaveWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId);
             throw error;
         }
-    }, { connection, concurrency: 2 });
+    }, { connection: getRedisConnection(), concurrency: 2 });
 };

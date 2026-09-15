@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { connection, queues } from '../queue/index.js';
+import { getRedisConnection, queues } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 
@@ -12,10 +12,7 @@ export const createImageWorker = (io) => {
             await supabase.from('jobs').update({ status: 'processing', progress: 75 }).eq('id', jobId);
             io.to(userId).emit('job-progress', { jobId, progress: 75 });
             
-            // Simulating image extraction logic for this architecture. 
-            // In a real scenario, we'd use poppler/pdf2pic or pdfjs to crop the imageBoxes.
-            // For now, we pass the questions along to the processor.
-            
+            // Pass questions along to processor
             await queues.questionProcessing.add('process-questions', {
                 jobId, userId, token, storagePath, questions, testName, duration
             });
@@ -26,5 +23,5 @@ export const createImageWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId);
             throw error;
         }
-    }, { connection, concurrency: 2 });
+    }, { connection: getRedisConnection(), concurrency: 2 });
 };

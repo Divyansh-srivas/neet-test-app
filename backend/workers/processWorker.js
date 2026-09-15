@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { connection, queues } from '../queue/index.js';
+import { getRedisConnection, queues } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -39,5 +39,5 @@ export const createProcessWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId);
             throw error;
         }
-    }, { connection, concurrency: 4 });
+    }, { connection: getRedisConnection(), concurrency: 4 });
 };

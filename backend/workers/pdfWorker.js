@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { connection, queues } from '../queue/index.js';
+import { getRedisConnection, queues } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { splitPdfIntoChunk, getTotalPages } from '../services/pdf.service.js';
@@ -54,5 +54,5 @@ export const createPdfWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', job.id);
             throw error;
         }
-    }, { connection });
+    }, { connection: getRedisConnection() });
 };
