@@ -45,44 +45,57 @@ export const createAiWorker = (io) => {
                         questionsExtracted: extractedCount 
                     });
 
-                    const chunkBase64 = await splitPdfIntoChunk(filePath, startPage, endPage);
-                    const rawQuestions = await extractQuestionsFromChunk(chunkBase64);
-                    
-                    const adjustedQuestions = rawQuestions.map(q => {
-                        if (q.imageBox) {
-                            q.imageBox.page = startPage + q.imageBox.page;
-                        }
-                        return q;
-                    });
-                    
-                    completedChunks++;
-                    extractedCount += adjustedQuestions.length;
-                    
-                    const updatedProgress = Math.round((completedChunks / chunkTasks.length) * 60) + 10;
-                    const updatedPagesDone = Math.min(completedChunks * CHUNK_SIZE, totalPages);
-                    
-                    // Update database immediately for HTTP polling fallback
-                    await supabase.from('jobs').update({ 
-                        progress: updatedProgress, 
-                        pages_completed: updatedPagesDone,
-                        extracted_questions: extractedCount
-                    }).eq('id', jobId);
+                    try {
+                        const chunkBase64 = await splitPdfIntoChunk(filePath, startPage, endPage);
+                        const rawQuestions = await extractQuestionsFromChunk(chunkBase64);
+                        
+                        const adjustedQuestions = rawQuestions.map(q => {
+                            if (q.imageBox) {
+                                q.imageBox.page = startPage + q.imageBox.page;
+                            }
+                            return q;
+                        });
+                        
+                        completedChunks++;
+                        extractedCount += adjustedQuestions.length;
+                        
+                        const updatedProgress = Math.round((completedChunks / chunkTasks.length) * 60) + 10;
+                        const updatedPagesDone = Math.min(completedChunks * CHUNK_SIZE, totalPages);
+                        
+                        // Update database immediately for HTTP polling fallback
+                        await supabase.from('jobs').update({ 
+                            progress: updatedProgress, 
+                            pages_completed: updatedPagesDone,
+                            extracted_questions: extractedCount
+                        }).eq('id', jobId);
 
-                    io.to(userId).emit('job-progress', { 
-                        jobId, 
-                        progress: updatedProgress, 
-                        pagesCompleted: updatedPagesDone, 
-                        totalPages,
-                        questionsExtracted: extractedCount 
-                    });
-                    
-                    return adjustedQuestions;
+                        io.to(userId).emit('job-progress', { 
+                            jobId, 
+                            progress: updatedProgress, 
+                            pagesCompleted: updatedPagesDone, 
+                            totalPages,
+                            questionsExtracted: extractedCount 
+                        });
+                        
+                        return adjustedQuestions;
+                    } catch(chunkErr) {
+                        logger.error(`Chunk ${startPage}-${endPage} extraction failed: ${chunkErr.message}`);
+                        completedChunks++;
+                        return []; // Proceed gracefully so questions from other chunks are preserved
+                    }
                 }));
                 
                 allExtractedRaw.push(...batchResults.flat());
+
+                // 2-second rate limit pacing delay between back-to-back chunks
+                if (i + CONCURRENCY_LIMIT < chunkTasks.length) {
+                    await new Promise(r => setTimeout(r, 2000));
+                }
             }
             
-            // allExtractedRaw is already populated
+            if (allExtractedRaw.length === 0) {
+                throw new Error('No questions could be extracted from this PDF. Please verify PDF format.');
+            }
             
             await supabase.from('jobs').update({ 
                 progress: 70, 
