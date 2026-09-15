@@ -93,7 +93,11 @@ export const createAiWorker = (io) => {
                 }
             }
             
+            console.log(`[DEBUG] All chunks completed. Total questions parsed across ${totalPages} pages:`, allExtractedRaw.length);
+            
             if (allExtractedRaw.length === 0) {
+                console.log(`[DEBUG] Final extracted array is empty ([]). File: ${filePath}`);
+                logger.error(`[DEBUG] Extraction finished with 0 questions across ${totalPages} pages. Possible unreadable image/scanned PDF.`);
                 throw new Error('No questions could be extracted from this PDF. Please verify PDF format.');
             }
             
