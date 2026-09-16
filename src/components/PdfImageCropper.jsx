@@ -8,7 +8,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 const pdfDocumentCache = new Map();
 
 /**
- * Helper to load PDF Document in-memory with caching.
+ * Helper to load PDF Document in-memory with caching and automatic proxy fallback.
  * Supports URL string, Base64 Data URL, ArrayBuffer, and Uint8Array.
  */
 async function loadPdfDocument(pdfSource) {
@@ -32,44 +32,51 @@ async function loadPdfDocument(pdfSource) {
                     pdfData[i] = binaryStr.charCodeAt(i);
                 }
             } else {
-                // Determine full URL if relative
-                let fetchUrl = pdfSource;
-                if (fetchUrl.startsWith('/')) {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://api.neogravix.in';
-                    fetchUrl = `${backendUrl}${fetchUrl}`;
+                const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://api.neogravix.in';
+                let primaryUrl = pdfSource;
+                if (primaryUrl.startsWith('/')) {
+                    primaryUrl = `${backendUrl}${primaryUrl}`;
                 }
 
-                // Try fetching with credentials/auth token first
-                try {
-                    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-                    const headers = {};
-                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+                const headers = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
 
-                    const res = await fetch(fetchUrl, { headers });
+                // Try fetching primary URL
+                try {
+                    const res = await fetch(primaryUrl, { headers });
                     if (res.ok) {
                         const arrayBuf = await res.arrayBuffer();
                         pdfData = new Uint8Array(arrayBuf);
-                    } else if (fetchUrl.startsWith('http')) {
-                        // Direct loading via pdfjsLib for external URLs
-                        const loadingTask = pdfjsLib.getDocument({
-                            url: fetchUrl,
-                            useSystemFonts: true,
-                            disableFontFace: true
-                        });
-                        return await loadingTask.promise;
                     } else {
-                        throw new Error(`HTTP ${res.status} while fetching PDF`);
+                        throw new Error(`HTTP ${res.status}`);
                     }
-                } catch (fetchErr) {
-                    if (fetchUrl.startsWith('http')) {
-                        const loadingTask = pdfjsLib.getDocument({
-                            url: fetchUrl,
-                            useSystemFonts: true,
-                            disableFontFace: true
-                        });
-                        return await loadingTask.promise;
+                } catch (primaryErr) {
+                    console.warn(`[PdfImageCropper] Primary PDF fetch failed (${primaryUrl}):`, primaryErr.message);
+
+                    // Extract uploadId / UUID from URL for backend PDF proxy fallback
+                    // Matches patterns like /uploads/userId/uploadId.pdf or UUIDs
+                    const match = primaryUrl.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|[^\/\?]+(?=\.pdf))/i);
+                    const uploadId = match ? match[1].replace('.pdf', '') : null;
+
+                    if (uploadId) {
+                        const proxyUrl = `${backendUrl}/api/pdf/${uploadId}`;
+                        console.log(`[PdfImageCropper] Attempting backend PDF proxy fallback: ${proxyUrl}`);
+                        try {
+                            const proxyRes = await fetch(proxyUrl, { headers });
+                            if (proxyRes.ok) {
+                                const arrayBuf = await proxyRes.arrayBuffer();
+                                pdfData = new Uint8Array(arrayBuf);
+                            } else {
+                                throw new Error(`Proxy HTTP ${proxyRes.status}`);
+                            }
+                        } catch (proxyErr) {
+                            console.error(`[PdfImageCropper] Proxy fallback failed:`, proxyErr.message);
+                            throw proxyErr;
+                        }
+                    } else {
+                        throw primaryErr;
                     }
-                    throw fetchErr;
                 }
             }
         } else if (pdfSource instanceof ArrayBuffer) {
@@ -112,7 +119,7 @@ export default function PdfImageCropper({ pdfUrl, pageNum, box }) {
                     throw new Error("Invalid bounding box");
                 }
 
-                // Load cached PDF document from in-memory buffer / URL
+                // Load cached PDF document from in-memory buffer / URL / proxy fallback
                 const pdf = await loadPdfDocument(pdfUrl);
 
                 const targetPage = pageNum || 1;
@@ -177,7 +184,6 @@ export default function PdfImageCropper({ pdfUrl, pageNum, box }) {
         return () => { isMounted.current = false; };
     }, [pdfUrl, pageNum, box]);
 
-    // NEVER inject raw red error stack traces directly onto student exam screen
     if (error) {
         return (
             <div style={{ padding: '6px 12px', background: 'var(--surface2)', borderRadius: 6, fontSize: 12, color: 'var(--muted)', marginTop: 8, fontStyle: 'italic', display: 'inline-block' }}>
