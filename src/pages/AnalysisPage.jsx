@@ -4,6 +4,7 @@ import { Trophy, Target, Clock, TrendingUp, Bookmark, AlertTriangle } from 'luci
 import { toggleBookmark, isBookmarked } from '../utils/storage'
 import { getTestRanking, getUserAnalytics } from '../api/performance'
 import { useAuth } from '../utils/useAuth'
+import PdfImageCropper from '../components/PdfImageCropper'
 
 const card = (style = {}) => ({ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, ...style })
 const PIE_COLORS = ['var(--green)', 'var(--red)', 'var(--border)']
@@ -207,11 +208,19 @@ export default function AnalysisPage({ test, setPage }) {
                       </span>
                     </div>
                     <p style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.5 }}>{q.question?.slice(0, 120)}{q.question?.length > 120 ? '...' : ''}</p>
-                    {q.imageUrl && (
+                    {q.imageUrl ? (
                       <div style={{ marginTop: 8 }}>
-                        <img src={q.imageUrl} alt="Diagram" style={{ maxHeight: 100, borderRadius: 4, border: '1px solid var(--border)' }} />
+                        <img src={q.imageUrl} alt="Diagram" style={{ maxHeight: 120, borderRadius: 4, border: '1px solid var(--border)' }} />
                       </div>
-                    )}
+                    ) : (q.imageBox && (q.pdfUrl || test.pdfUrl || test.pdf_url)) ? (
+                      <div style={{ marginTop: 8 }}>
+                        <PdfImageCropper 
+                          pdfUrl={q.pdfUrl || test.pdfUrl || test.pdf_url} 
+                          pageNum={q.imageBox.page} 
+                          box={q.imageBox.box} 
+                        />
+                      </div>
+                    ) : null}
                     <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12 }}>
                       <span style={{ color: 'var(--muted)' }}>Your answer: <span style={{ color: isSkipped ? 'var(--muted)' : isCorrect ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{ans || 'Not attempted'}</span></span>
                       {!isCorrect && <span style={{ color: 'var(--muted)' }}>Correct: <span style={{ color: 'var(--green)', fontWeight: 600 }}>{q.correct}</span></span>}

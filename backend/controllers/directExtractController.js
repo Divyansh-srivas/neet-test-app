@@ -36,15 +36,15 @@ export const uploadAndExtractDirect = async (req, res, next) => {
 
         logger.info(`[DIRECT] PDF saved: ${finalPath}`);
 
-        // ─── 2. Upload to Supabase Storage (non-blocking) ───────────
+        // ─── 2. Upload to Supabase Storage ───────────────────────────
         const fileBuffer = fs.readFileSync(finalPath);
         const storagePath = `${userId}/${uploadId}.pdf`;
         
-        supabaseAdmin.storage
+        const storageUploadPromise = supabaseAdmin.storage
             .from('uploads')
-            .upload(storagePath, fileBuffer, { contentType: 'application/pdf', upsert: false })
-            .then(({ error }) => { if (error) logger.warn(`Storage upload failed: ${error.message}`); })
-            .catch(() => {});
+            .upload(storagePath, fileBuffer, { contentType: 'application/pdf', upsert: true })
+            .then(({ error }) => { if (error) logger.warn(`Storage upload warning: ${error.message}`); })
+            .catch((err) => logger.warn(`Storage upload catch: ${err.message}`));
 
         // ─── 3. Create upload + job records ──────────────────────────
         await supabaseAdmin.from('uploads').insert({
@@ -156,14 +156,18 @@ export const uploadAndExtractDirect = async (req, res, next) => {
         }
 
         // ─── 8. Get PDF URL ──────────────────────────────────────────
+        await storageUploadPromise.catch(() => {});
+
         let pdfUrl = null;
         const { data: signedData } = await supabaseAdmin.storage
             .from('uploads')
             .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+
         if (signedData?.signedUrl) {
             pdfUrl = signedData.signedUrl;
         } else {
-            pdfUrl = `${config.SUPABASE_URL}/storage/v1/object/public/uploads/${storagePath}`;
+            // Fallback to backend PDF proxy endpoint (bypasses private Supabase bucket 400 errors)
+            pdfUrl = `/api/pdf/${uploadId}`;
         }
 
         const questionsWithPdf = cleanedQuestions.map(q => ({ ...q, pdfUrl }));

@@ -45,7 +45,8 @@ export const createSaveWorker = (io) => {
                 if (signedData && signedData.signedUrl) {
                     pdfUrl = signedData.signedUrl;
                 } else {
-                    pdfUrl = `${config.SUPABASE_URL || 'https://rtngewpxtuayymmldmsu.supabase.co'}/storage/v1/object/public/uploads/${storagePath}`;
+                    const uploadId = storagePath.split('/').pop().replace('.pdf', '');
+                    pdfUrl = `/api/pdf/${uploadId}`;
                 }
             }
 

@@ -9,6 +9,7 @@ import { getJobs, getJobStatus, deleteJob } from '../controllers/jobsController.
 import { getNotes, saveNotes } from '../controllers/notesController.js';
 import { getProfile, updateProfile } from '../controllers/profileController.js';
 import { getStudyMaterials } from '../controllers/libraryController.js';
+import { getPdfFile } from '../controllers/pdfController.js';
 
 const router = express.Router();
 
@@ -48,5 +49,8 @@ router.put('/profile', updateProfile);
 
 // Library API
 router.get('/library/:subject', getStudyMaterials);
+
+// PDF Download Proxy Route
+router.get('/pdf/:uploadId', getPdfFile);
 
 export default router;

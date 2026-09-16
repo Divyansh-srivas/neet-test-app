@@ -571,7 +571,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
             {/* Question Text */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, marginBottom: 24, lineHeight: 1.7, fontSize: questionFontSize }}>
               {q.question}
-              {q.imageUrl && (
+              {q.imageUrl ? (
                 <div style={{ marginTop: 20, textAlign: 'center', position: 'relative', display: 'inline-block' }}>
                   <img 
                     src={q.imageUrl} 
@@ -583,8 +583,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
                     <ZoomIn size={14} /> Click to zoom
                   </div>
                 </div>
-              )}
-              {q.imageBox && (q.pdfUrl || test.pdfUrl || test.pdf_url) && (
+              ) : (q.imageBox && (q.pdfUrl || test.pdfUrl || test.pdf_url)) ? (
                 <div style={{ marginTop: 20, textAlign: 'center' }}>
                     <PdfImageCropper 
                         pdfUrl={q.pdfUrl || test.pdfUrl || test.pdf_url} 
@@ -592,7 +591,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
                         box={q.imageBox.box} 
                     />
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Options */}
