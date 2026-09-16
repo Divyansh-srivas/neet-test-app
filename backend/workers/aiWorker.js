@@ -2,10 +2,8 @@ import { Worker } from 'bullmq';
 import { getRedisConnection, queues } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
-import { splitPdfIntoChunk } from '../services/pdf.service.js';
-import { extractQuestionsFromChunk } from '../services/gemini.service.js';
-
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+import { extractQuestionsFromPDFBuffer } from '../services/gemini.service.js';
+import fs from 'fs/promises';
 
 export const createAiWorker = (io) => {
     return new Worker('ai-extraction', async job => {
@@ -13,101 +11,86 @@ export const createAiWorker = (io) => {
         const supabase = supabaseAdmin;
         
         try {
+            // ─── STEP 1: Update status to processing ────────────────────
             await supabase.from('jobs').update({ status: 'processing', progress: 10 }).eq('id', jobId);
-            
-            const CHUNK_SIZE = 2;
-            let chunkTasks = [];
-            
-            for (let i = 0; i < totalPages; i += CHUNK_SIZE) {
-                const endPage = Math.min(i + CHUNK_SIZE, totalPages) - 1;
-                chunkTasks.push({ startPage: i, endPage });
+            io.to(userId).emit('job-progress', { 
+                jobId, 
+                progress: 15, 
+                pagesCompleted: 0, 
+                totalPages,
+                questionsExtracted: 0,
+                status: 'Reading PDF...'
+            });
+
+            // ─── STEP 2: Read the entire PDF file into a buffer ─────────
+            logger.info(`[AI WORKER] Reading PDF from: ${filePath}`);
+            const pdfBuffer = await fs.readFile(filePath);
+            logger.info(`[AI WORKER] PDF buffer size: ${pdfBuffer.length} bytes (${Math.round(pdfBuffer.length / 1024)} KB)`);
+
+            if (!pdfBuffer || pdfBuffer.length === 0) {
+                throw new Error('PDF file is empty or could not be read');
             }
+
+            // ─── STEP 3: Update progress — sending to Gemini ────────────
+            await supabase.from('jobs').update({ progress: 20 }).eq('id', jobId);
+            io.to(userId).emit('job-progress', { 
+                jobId, 
+                progress: 25, 
+                pagesCompleted: 0, 
+                totalPages,
+                questionsExtracted: 0,
+                status: 'AI is analyzing the PDF...'
+            });
+
+            // ─── STEP 4: Send ENTIRE PDF to Gemini natively ─────────────
+            // NO chunking, NO local image conversion, NO sharp/canvas.
+            // Gemini reads the PDF pages directly including diagrams.
+            logger.info(`[AI WORKER] Sending entire PDF to Gemini (${totalPages} pages)...`);
             
-            let completedChunks = 0;
-            let allExtractedRaw = [];
-            
-            const CONCURRENCY_LIMIT = 2; // Process 2 chunks concurrently
-            
-            for (let i = 0; i < chunkTasks.length; i += CONCURRENCY_LIMIT) {
-                const batch = chunkTasks.slice(i, i + CONCURRENCY_LIMIT);
-                
-                const currentPageStart = Math.min(completedChunks * CHUNK_SIZE, totalPages);
-                const currentProgress = Math.min(Math.round((currentPageStart / totalPages) * 60) + 10, 70);
-
-                io.to(userId).emit('job-progress', { 
-                    jobId, 
-                    progress: currentProgress, 
-                    pagesCompleted: currentPageStart, 
-                    totalPages,
-                    questionsExtracted: allExtractedRaw.length 
-                });
-
-                const batchResults = await Promise.all(batch.map(async (chunk) => {
-                    const { startPage, endPage } = chunk;
-                    try {
-                        const chunkBase64 = await splitPdfIntoChunk(filePath, startPage, endPage);
-                        const rawQuestions = await extractQuestionsFromChunk(chunkBase64);
-                        
-                        const adjustedQuestions = rawQuestions.map(q => {
-                            if (q.imageBox) {
-                                q.imageBox.page = startPage + q.imageBox.page;
-                            }
-                            return q;
-                        });
-                        
-                        completedChunks++;
-                        return adjustedQuestions;
-                    } catch (chunkErr) {
-                        logger.error(`[WORKER WARNING] Chunk ${startPage}-${endPage} failed: ${chunkErr.message}. Continuing with other pages.`);
-                        completedChunks++;
-                        return []; // Keep questions from other pages!
-                    }
-                }));
-
-                const newQuestions = batchResults.flat();
-                allExtractedRaw.push(...newQuestions);
-
-                const pagesDone = Math.min(completedChunks * CHUNK_SIZE, totalPages);
-                const updatedProgress = Math.min(Math.round((pagesDone / totalPages) * 60) + 10, 70);
-
-                // Monotonic & Persistent State: Update database immediately after EVERY completed batch
-                await supabase.from('jobs').update({ 
-                    progress: updatedProgress, 
-                    pages_completed: pagesDone,
-                    extracted_questions: allExtractedRaw.length
-                }).eq('id', jobId);
-
-                io.to(userId).emit('job-progress', { 
-                    jobId, 
-                    progress: updatedProgress, 
-                    pagesCompleted: pagesDone, 
-                    totalPages,
-                    questionsExtracted: allExtractedRaw.length 
-                });
-
-                // Adaptive Throttling: 1000ms pause between batches to prevent TPM/RPM exhaustion
-                if (i + CONCURRENCY_LIMIT < chunkTasks.length) {
-                    await delay(1000);
+            const allExtractedRaw = await extractQuestionsFromPDFBuffer(pdfBuffer, (progressUpdate) => {
+                // Optional progress callback from the extraction function
+                if (progressUpdate) {
+                    io.to(userId).emit('job-progress', { 
+                        jobId, 
+                        progress: Math.min(25 + Math.round(progressUpdate * 40), 65),
+                        pagesCompleted: Math.round(progressUpdate * totalPages), 
+                        totalPages,
+                        questionsExtracted: 0,
+                        status: 'AI is extracting questions...'
+                    });
                 }
-            }
-            
-            console.log(`[DEBUG] Extraction finished across ${totalPages} pages. Total questions recovered:`, allExtractedRaw.length);
+            });
+
+            // ─── STEP 5: Validate extraction results ────────────────────
+            console.log(`[AI WORKER] Extraction complete. Total questions recovered: ${allExtractedRaw.length}`);
             
             if (allExtractedRaw.length === 0) {
-                const debugInfo = `TotalPages: ${totalPages}, ChunksProcessed: ${completedChunks}/${chunkTasks.length}`;
-                const realErrorMsg = `Extraction yielded 0 questions (${debugInfo}). Please verify PDF content or format.`;
-                console.error(`[CRITICAL ERROR] ${realErrorMsg}`);
-                logger.error(`[DEBUG] ${realErrorMsg}`);
-                throw new Error(realErrorMsg);
+                const debugInfo = `TotalPages: ${totalPages}, PDFSize: ${pdfBuffer.length} bytes`;
+                const errorMsg = `Extraction yielded 0 questions (${debugInfo}). The Gemini API processed the PDF but found no parseable MCQs. Please verify the PDF contains standard NEET MCQ format.`;
+                console.error(`[CRITICAL] ${errorMsg}`);
+                logger.error(`[AI WORKER] ${errorMsg}`);
+                throw new Error(errorMsg);
             }
-            
+
+            // ─── STEP 6: Update progress — extraction done ──────────────
             await supabase.from('jobs').update({ 
                 progress: 70, 
                 pages_completed: totalPages,
                 extracted_questions: allExtractedRaw.length
             }).eq('id', jobId);
 
-            // Enqueue to Image Extraction
+            io.to(userId).emit('job-progress', { 
+                jobId, 
+                progress: 70, 
+                pagesCompleted: totalPages, 
+                totalPages,
+                questionsExtracted: allExtractedRaw.length,
+                status: `Extracted ${allExtractedRaw.length} questions! Processing...`
+            });
+
+            logger.info(`[AI WORKER] ✅ Successfully extracted ${allExtractedRaw.length} questions from ${totalPages} pages`);
+
+            // ─── STEP 7: Enqueue to Image Extraction ────────────────────
             await queues.imageExtraction.add('extract-images', {
                 jobId, userId, filePath, storagePath, token, questions: allExtractedRaw, testName, duration
             });
@@ -118,5 +101,9 @@ export const createAiWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId);
             throw error;
         }
-    }, { connection: getRedisConnection(), concurrency: 1 });
+    }, { 
+        connection: getRedisConnection(), 
+        concurrency: 1,
+        lockDuration: 300000 // 5 minute lock — Gemini can take time on large PDFs
+    });
 };

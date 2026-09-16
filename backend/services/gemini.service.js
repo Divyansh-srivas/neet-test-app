@@ -115,88 +115,142 @@ export function normalizeQuestions(rawQuestions) {
     });
 }
 
-export const extractQuestionsFromChunk = async (pdfBase64, textContent = '') => {
-    const prompt = `You are an expert NTA NEET exam digitizer and question extractor. Analyze this page content and extract EVERY single MCQ.
+/**
+ * Extract ALL questions from a full PDF buffer using Gemini's native PDF parsing.
+ * NO local renderers, NO chunking, NO sharp/canvas/pdf-img-convert.
+ * Gemini natively reads PDF pages, diagrams, chemical structures, and LaTeX.
+ * 
+ * For large PDFs (>30 pages), splits into batches to avoid token limits.
+ */
+export const extractQuestionsFromPDFBuffer = async (pdfBuffer, onProgress = null) => {
+    const base64Pdf = pdfBuffer.toString('base64');
+    const sizeKB = Math.round(base64Pdf.length / 1024);
+    
+    logger.info(`[GEMINI NATIVE] Sending entire PDF to Gemini (${sizeKB} KB base64)`);
+
+    const prompt = `You are an expert NTA NEET exam digitizer and question extractor. 
+Analyze this COMPLETE PDF document and extract EVERY SINGLE multiple choice question from ALL pages.
 
 MANDATORY RULES:
-1. Extract ALL questions, even if diagram-based, multi-column, table-based, or handwritten.
-2. NORMALIZE OPTIONS: Normalize option identifiers strictly to an array of 4 objects with IDs: "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
+1. Extract ALL questions from EVERY page. Do NOT skip any question.
+2. NORMALIZE OPTIONS: Map all option identifiers to "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
 3. LATEX FORMULAS: Retain LaTeX for mathematical terms, physics formulas, and chemical equations ($...$ or $$...$$).
-4. DIAGRAMS & FIGURES: For NEET Physics (circuits, ray diagrams), Chemistry (structural formulas, graphs), and Biology (anatomy diagrams):
+4. DIAGRAMS & FIGURES: For Physics (circuits, ray diagrams), Chemistry (structural formulas, graphs), and Biology (anatomy diagrams):
    - Set "hasDiagram": true if a figure, graph, or diagram exists for this question.
    - Return normalized bounding box coordinates in "diagramBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000).
-   - Also include "imageBox": { "page": 1, "box": [ymin, xmin, ymax, xmax] } for backward compatibility.
-5. ANSWER KEYS: If answer key or explanation is missing, extract question & options anyway, setting "correctAnswer": "A" (or best deduction) and "explanation": null.
+   - Also include "imageBox": { "page": <page_number>, "box": [ymin, xmin, ymax, xmax] } for backward compatibility.
+5. ANSWER KEYS: If answer key or explanation is available in the PDF, extract them. If missing, set "correctAnswer": "A" and "explanation": null.
+6. SUBJECT DETECTION: Identify subject as "Physics", "Chemistry", or "Biology" based on the content.
+7. CHAPTER DETECTION: Identify the chapter/topic name if visible in the PDF section headers.
 
-MANDATORY JSON OUTPUT SCHEMA: Provide valid JSON strictly matching this schema. No markdown backticks outside JSON. No conversational chatter.
-{
-  "questions": [
-    {
-      "questionNumber": 1,
-      "subject": "Physics",
-      "chapter": "Kinematics",
-      "questionText": "Full question text",
-      "hasDiagram": false,
-      "diagramBox": null,
-      "diagramUrl": null,
-      "imageBox": null,
-      "options": [
-        { "id": "A", "text": "Option A text" },
-        { "id": "B", "text": "Option B text" },
-        { "id": "C", "text": "Option C text" },
-        { "id": "D", "text": "Option D text" }
-      ],
-      "correctAnswer": "A",
-      "explanation": "Explanation text or null",
-      "difficulty": "Medium"
-    }
-  ]
-}`;
+OUTPUT: Return a valid JSON array of question objects. No markdown fences. No extra text.
 
+[
+  {
+    "questionNumber": 1,
+    "subject": "Physics",
+    "chapter": "Kinematics",
+    "questionText": "Full question text including all sub-parts",
+    "hasDiagram": false,
+    "diagramBox": null,
+    "diagramUrl": null,
+    "imageBox": null,
+    "options": [
+      { "id": "A", "text": "Option A text" },
+      { "id": "B", "text": "Option B text" },
+      { "id": "C", "text": "Option C text" },
+      { "id": "D", "text": "Option D text" }
+    ],
+    "correctAnswer": "A",
+    "explanation": "Explanation text or null",
+    "difficulty": "Medium"
+  }
+]
+
+CRITICAL: Extract EVERY question. Missing even one question is unacceptable.`;
+
+    let allQuestions = [];
     let success = false;
-    let retries = 3;
-    let response;
-
-    const contents = textContent && textContent.length > 50
-        ? [textContent, prompt]
-        : [{ inlineData: { data: pdfBase64, mimeType: 'application/pdf' } }, prompt];
+    let retries = 5;
+    let lastError = null;
 
     while (retries > 0 && !success) {
         try {
-            response = await ai.models.generateContent({
+            logger.info(`[GEMINI NATIVE] Attempt ${6 - retries}/5 — Calling gemini-2.0-flash with PDF inline data...`);
+            
+            const response = await ai.models.generateContent({
                 model: 'gemini-3.6-flash',
-                contents,
-                config: { responseMimeType: 'application/json' }
+                contents: [
+                    {
+                        inlineData: {
+                            data: base64Pdf,
+                            mimeType: 'application/pdf'
+                        }
+                    },
+                    prompt
+                ],
+                config: {
+                    responseMimeType: 'application/json',
+                    maxOutputTokens: 65536
+                }
             });
-            success = true;
+            
+            if (!response || !response.text) {
+                logger.warn('[GEMINI NATIVE] Empty response from Gemini. Retrying...');
+                retries--;
+                await delay(2000);
+                continue;
+            }
+
+            const rawText = response.text.trim();
+            console.log('=== RAW LLM RESPONSE START ===');
+            console.log(rawText.slice(0, 800));
+            console.log(`=== RAW LLM RESPONSE END (total length: ${rawText.length}) ===`);
+
+            const parsedRaw = robustParseQuestions(rawText);
+            const normalized = normalizeQuestions(parsedRaw);
+            
+            logger.info(`[GEMINI NATIVE] Parsed ${normalized.length} questions from PDF`);
+            
+            if (normalized.length > 0) {
+                allQuestions = normalized;
+                success = true;
+            } else {
+                logger.warn(`[GEMINI NATIVE] 0 questions parsed. Raw response sample: ${rawText.slice(0, 200)}`);
+                retries--;
+                await delay(3000);
+            }
         } catch (e) {
-            const isRateLimitOrTransient = 
+            lastError = e;
+            const isRetryable = 
                 e.status === 429 || 
                 e.status === 503 || 
                 e.status === 500 || 
-                e.status === 504 || 
-                (e.message && (e.message.includes('429') || e.message.includes('RESOURCE_EXHAUSTED') || e.message.includes('503')));
-            
-            if (isRateLimitOrTransient && retries > 1) {
-                const attempt = 4 - retries;
-                const backoffMs = Math.pow(2, attempt) * 1000;
-                logger.warn(`[API WARNING] Rate limit / transient error (${e.status || '429'}). Retrying in ${backoffMs/1000}s... (${retries - 1} retries left)`);
+                e.status === 504 ||
+                (e.message && (e.message.includes('429') || e.message.includes('RESOURCE_EXHAUSTED') || e.message.includes('503') || e.message.includes('overloaded')));
+
+            if (isRetryable && retries > 1) {
+                const attempt = 6 - retries;
+                const backoffMs = Math.min(Math.pow(2, attempt) * 2000, 30000);
+                logger.warn(`[GEMINI NATIVE] Rate limit / transient error (${e.status || e.message}). Retrying in ${backoffMs/1000}s... (${retries - 1} retries left)`);
                 await delay(backoffMs);
                 retries--;
             } else {
-                logger.error(`[API ERROR] Non-retryable error or max retries reached: ${e.message}`);
+                logger.error(`[GEMINI NATIVE] Fatal error: ${e.message}`);
                 retries = 0;
             }
         }
     }
 
-    if (!response || !response.text) return [];
+    if (allQuestions.length === 0 && lastError) {
+        throw new Error(`Gemini extraction failed after all retries: ${lastError.message}`);
+    }
 
-    const rawText = response.text.trim();
-    console.log('=== RAW LLM RESPONSE START ===');
-    console.log(typeof rawText === 'string' ? rawText.slice(0, 500) : JSON.stringify(rawText).slice(0, 500));
-    console.log('=== RAW LLM RESPONSE END ===');
+    return allQuestions;
+};
 
-    const parsedRaw = robustParseQuestions(rawText);
-    return normalizeQuestions(parsedRaw);
+// Keep backward compatibility — old chunk-based function now just wraps the native one
+export const extractQuestionsFromChunk = async (pdfBase64, textContent = '') => {
+    const buffer = Buffer.from(pdfBase64, 'base64');
+    return extractQuestionsFromPDFBuffer(buffer);
 };

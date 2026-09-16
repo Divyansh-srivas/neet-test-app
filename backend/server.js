@@ -16,6 +16,7 @@ const server = http.createServer(app);
 
 // Initialize WebSockets
 const io = initSocket(server);
+app.set('io', io); // Make io accessible in controllers via req.app.get('io')
 
 // Security Middlewares
 app.use(helmet({ crossOriginResourcePolicy: false }));
