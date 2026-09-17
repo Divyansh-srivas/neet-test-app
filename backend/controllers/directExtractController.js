@@ -47,15 +47,19 @@ export const uploadAndExtractDirect = async (req, res, next) => {
             .catch((err) => logger.warn(`Storage upload catch: ${err.message}`));
 
         // ─── 3. Create upload + job records ──────────────────────────
-        const { error: uploadInsertErr } = await supabaseAdmin.from('uploads').insert({
+        const { data: uploadRecord, error: uploadInsertErr } = await supabaseAdmin.from('uploads').insert([{
             id: uploadId,
             user_id: userId,
             original_name: req.file.originalname || 'upload.pdf',
             file_path: storagePath
-        });
+        }]).select().single();
 
         if (uploadInsertErr) {
-            throw new Error(`Failed to create upload record: ${uploadInsertErr.message}`);
+            console.error('[Upload Record Insert Failed]:', uploadInsertErr.message, uploadInsertErr.details);
+            return res.status(500).json({ 
+                error: `Failed to create upload record: ${uploadInsertErr.message}`, 
+                hint: "Check SUPABASE_SERVICE_ROLE_KEY environment variable on Render"
+            });
         }
 
         const { error: jobInsertErr } = await supabaseAdmin.from('jobs').insert({
