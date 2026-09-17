@@ -47,16 +47,20 @@ export const uploadAndExtractDirect = async (req, res, next) => {
             .catch((err) => logger.warn(`Storage upload catch: ${err.message}`));
 
         // ─── 3. Create upload + job records ──────────────────────────
-        await supabaseAdmin.from('uploads').insert({
+        const { error: uploadInsertErr } = await supabaseAdmin.from('uploads').insert({
             id: uploadId,
             user_id: userId,
             original_name: req.file.originalname || 'upload.pdf',
             file_path: storagePath
-        }).then(({ error }) => { if (error) logger.warn(`Upload record insert: ${error.message}`); });
+        });
+
+        if (uploadInsertErr) {
+            throw new Error(`Failed to create upload record: ${uploadInsertErr.message}`);
+        }
 
         const totalPages = await getTotalPages(finalPath);
 
-        await supabaseAdmin.from('jobs').insert({
+        const { error: jobInsertErr } = await supabaseAdmin.from('jobs').insert({
             id: jobId,
             user_id: userId,
             upload_id: uploadId,
@@ -64,6 +68,10 @@ export const uploadAndExtractDirect = async (req, res, next) => {
             progress: 10,
             total_pages: totalPages
         });
+
+        if (jobInsertErr) {
+            throw new Error(`Failed to create job record: ${jobInsertErr.message}`);
+        }
 
         // Return immediately with jobId — frontend will poll for status
         res.status(202).json({ success: true, jobId });
