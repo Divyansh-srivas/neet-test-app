@@ -10,6 +10,7 @@ import { getNotes, saveNotes } from '../controllers/notesController.js';
 import { getProfile, updateProfile } from '../controllers/profileController.js';
 import { getStudyMaterials } from '../controllers/libraryController.js';
 import { getPdfFile } from '../controllers/pdfController.js';
+import { checkSchema } from '../controllers/debugController.js';
 
 const router = express.Router();
 
@@ -52,5 +53,8 @@ router.get('/library/:subject', getStudyMaterials);
 
 // PDF Download Proxy Route
 router.get('/pdf/:uploadId', getPdfFile);
+
+// Debug Route
+router.get('/debug/schema', checkSchema);
 
 export default router;
