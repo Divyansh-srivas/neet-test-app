@@ -87,9 +87,20 @@ export function JobProvider({ children }) {
     // Fetch existing active jobs from backend via API on mount
     fetchExistingJobs();
 
+    let consecutiveErrors = 0;
     // 3-second Polling fallback for guaranteed UI updates even without WebSockets
-    const pollInterval = setInterval(() => {
-        fetchExistingJobs();
+    const pollInterval = setInterval(async () => {
+        try {
+            await fetchExistingJobs();
+            consecutiveErrors = 0;
+        } catch (err) {
+            consecutiveErrors++;
+            console.warn(`[Jobs Polling] Pausing due to error (${consecutiveErrors}/3)`);
+            if (consecutiveErrors >= 3) {
+                console.error('[Jobs Polling] Auto-stopping poll interval to prevent server crash.');
+                clearInterval(pollInterval);
+            }
+        }
     }, 3000);
 
     return () => {
@@ -99,44 +110,40 @@ export function JobProvider({ children }) {
   }, [user]);
 
   const fetchExistingJobs = async () => {
-      try {
-          const res = await fetchAPI('/api/jobs');
-          if (!res.ok) return;
-          const data = await res.json();
-          if (data.jobs) {
-              setActiveJobs(prev => {
-                  const updated = { ...prev };
-                  data.jobs.forEach(job => {
-                      if (job.status === 'processing' || job.status === 'queued') {
+      const res = await fetchAPI('/api/jobs');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.jobs) {
+          setActiveJobs(prev => {
+              const updated = { ...prev };
+              data.jobs.forEach(job => {
+                  if (job.status === 'processing' || job.status === 'queued') {
+                      updated[job.id] = {
+                          status: job.status,
+                          progress: job.progress || 0,
+                          pagesCompleted: job.pages_completed || 0,
+                          totalPages: job.total_pages || 0,
+                          questionsExtracted: job.extracted_questions || 0
+                      };
+                  } else if (job.status === 'failed') {
+                      if (updated[job.id] && updated[job.id].status !== 'failed') {
                           updated[job.id] = {
-                              status: job.status,
-                              progress: job.progress || 0,
-                              pagesCompleted: job.pages_completed || 0,
-                              totalPages: job.total_pages || 0,
-                              questionsExtracted: job.extracted_questions || 0
+                              status: 'failed',
+                              error: job.error_message || 'Extraction failed'
                           };
-                      } else if (job.status === 'failed') {
-                          if (updated[job.id] && updated[job.id].status !== 'failed') {
-                              updated[job.id] = {
-                                  status: 'failed',
-                                  error: job.error_message || 'Extraction failed'
-                              };
-                          }
-                      } else if (job.status === 'completed') {
-                          if (updated[job.id] && updated[job.id].status !== 'completed') {
-                              updated[job.id] = {
-                                  ...updated[job.id],
-                                  status: 'completed',
-                                  progress: 100
-                              };
-                          }
                       }
-                  });
-                  return updated;
+                  } else if (job.status === 'completed') {
+                      if (updated[job.id] && updated[job.id].status !== 'completed') {
+                          updated[job.id] = {
+                              ...updated[job.id],
+                              status: 'completed',
+                              progress: 100
+                          };
+                      }
+                  }
               });
-          }
-      } catch (e) {
-          console.error("Failed to fetch jobs", e);
+              return updated;
+          });
       }
   };
 
