@@ -179,7 +179,7 @@ CRITICAL: Extract EVERY question. Missing even one question is unacceptable.`;
             logger.info(`[GEMINI NATIVE] Attempt ${6 - retries}/5 — Calling gemini-2.0-flash with PDF inline data...`);
             
             const response = await ai.models.generateContent({
-                model: 'gemini-3.6-flash',
+                model: 'gemini-2.0-flash',
                 contents: [
                     {
                         inlineData: {
