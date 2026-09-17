@@ -17,7 +17,7 @@ export default function UploadPage({ setPage, setActiveTest }) {
   const [durationHours, setDurationHours] = useState(3)
   const [durationMins, setDurationMins] = useState(0)
   const fileRef = useRef()
-  const { uploadPdf } = useJob()
+  const { uploadPdf, clearAllJobs } = useJob()
 
   const handleFile = (f) => {
     if (f?.type === 'application/pdf') {
@@ -50,6 +50,7 @@ export default function UploadPage({ setPage, setActiveTest }) {
     setStatus('loading')
     setQuestions([])
     setExtractionStats(null)
+    clearAllJobs() // Clear stale jobs before starting a new one
 
     try {
       const duration = (parseInt(durationHours) || 0) * 3600 + (parseInt(durationMins) || 0) * 60;
@@ -237,7 +238,7 @@ export default function UploadPage({ setPage, setActiveTest }) {
         </button>
       ) : (
         <div style={{ display: 'flex', gap: 12 }}>
-          <button onClick={() => { setStatus(null); setFile(null); setQuestions([]); setExtractionStats(null); }} style={{
+          <button onClick={() => { clearAllJobs(); setStatus(null); setFile(null); setQuestions([]); setExtractionStats(null); }} style={{
             flex: 1, padding: '14px', borderRadius: 12, border: '1px solid var(--border)',
             background: 'transparent', color: '#94a3b8', fontWeight: 600, cursor: 'pointer'
           }}>Upload Another PDF</button>

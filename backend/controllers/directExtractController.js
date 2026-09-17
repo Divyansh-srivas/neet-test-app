@@ -80,8 +80,17 @@ export const uploadAndExtractDirect = async (req, res, next) => {
 
         // ─── Background Execution ────────────────────────────────────
         setImmediate(async () => {
+            console.log(`[WORKER START] Triggered for Job: ${jobId}, Buffer Size: ${fileBuffer?.length || 0}`);
+            if (!fileBuffer || fileBuffer.length === 0) {
+                console.error(`[WORKER ERROR] PDF buffer is empty for job ${jobId}`);
+                await supabaseAdmin.from('jobs').update({ status: 'failed', error_message: 'Empty PDF buffer' }).eq('id', jobId);
+                return;
+            }
+
             try {
+                console.log(`[WORKER] Loading PDF with pdf-lib to count pages...`);
                 const totalPages = await getTotalPages(finalPath);
+                console.log(`[WORKER] Total pages found: ${totalPages}`);
                 
                 // Set total pages in DB
                 await supabaseAdmin.from('jobs').update({ total_pages: totalPages }).eq('id', jobId);
@@ -110,12 +119,15 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                 const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
                     const pageNum = idx + 1;
                     return limit(async () => {
+                        console.log(`[WORKER] ---> Slicing Page ${pageNum}/${totalPages}`);
                         try {
                             const pageB64 = await splitPdfIntoChunk(finalPath, pageNum, pageNum);
                             const pageBuffer = Buffer.from(pageB64, 'base64');
                             
+                            console.log(`[WORKER] Sending Page ${pageNum} to Gemini (${pageBuffer.length} bytes)...`);
                             // 1. Extract from Gemini (Sequential zero-loss retry happens inside here)
                             const questions = await extractQuestionsFromSinglePage(pageBuffer);
+                            console.log(`[WORKER] Page ${pageNum} extracted: ${questions.length} questions`);
                             
                             // 2. Process Diagram Cropping (Non-blocking array)
                             const cropPromises = questions.map(async (q) => {
@@ -220,10 +232,12 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                     });
                 }
 
+                console.log(`[WORKER COMPLETE] All pages extracted for ${jobId}`);
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                 logger.info(`[DIRECT] ✅ Job ${jobId} completed: ${questionsWithPdf.length} questions in ${elapsed}s`);
                 
             } catch (err) {
+                console.error(`[WORKER FATAL CRASH for ${jobId}]:`, err.stack || err.message);
                 logger.error(`[DIRECT] Background extraction error: ${err.message}`);
                 await supabaseAdmin.from('jobs').update({ status: 'failed', error_message: err.message }).eq('id', jobId).catch(() => {});
                 const io = req.app.get('io');

@@ -176,12 +176,16 @@ export function JobProvider({ children }) {
       setDismissedJobs(prev => new Set(prev).add(jobId));
   };
 
+  const clearAllJobs = () => {
+      setDismissedJobs(new Set(Object.keys(activeJobs)));
+  };
+
   const visibleActiveJobs = Object.fromEntries(
       Object.entries(activeJobs).filter(([id]) => !dismissedJobs.has(id))
   );
 
   return (
-    <JobContext.Provider value={{ activeJobs: visibleActiveJobs, uploadPdf, clearJob }}>
+    <JobContext.Provider value={{ activeJobs: visibleActiveJobs, uploadPdf, clearJob, clearAllJobs }}>
       {children}
     </JobContext.Provider>
   );
