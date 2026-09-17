@@ -223,6 +223,9 @@ export const uploadAndExtractDirect = async (req, res, next) => {
             const io = req.app.get('io');
             if (io) io.to(req.user?.id).emit('job-failed', { jobId, error: error.message });
         }
-        // Don't call next(error) since response was already sent
+        
+        if (!res.headersSent) {
+            return res.status(500).json({ error: error.message });
+        }
     }
 };
