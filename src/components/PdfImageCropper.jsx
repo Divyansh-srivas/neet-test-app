@@ -55,9 +55,18 @@ async function loadPdfDocument(pdfSource) {
                     console.warn(`[PdfImageCropper] Primary PDF fetch failed (${primaryUrl}):`, primaryErr.message);
 
                     // Extract uploadId / UUID from URL for backend PDF proxy fallback
-                    // Matches patterns like /uploads/userId/uploadId.pdf or UUIDs
-                    const match = primaryUrl.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|[^\/\?]+(?=\.pdf))/i);
-                    const uploadId = match ? match[1].replace('.pdf', '') : null;
+                    let uploadId = null;
+                    try {
+                        const urlObj = new URL(primaryUrl, 'http://localhost');
+                        const filename = urlObj.pathname.split('/').pop();
+                        if (filename && filename.endsWith('.pdf')) {
+                            uploadId = filename.replace('.pdf', '');
+                        } else if (filename && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(filename)) {
+                            uploadId = filename;
+                        }
+                    } catch (e) {
+                        console.warn('[PdfImageCropper] URL parse failed for fallback:', e);
+                    }
 
                     if (uploadId) {
                         const proxyUrl = `${backendUrl}/api/pdf/${uploadId}`;
@@ -186,8 +195,8 @@ export default function PdfImageCropper({ pdfUrl, pageNum, box }) {
 
     if (error) {
         return (
-            <div style={{ padding: '6px 12px', background: 'var(--surface2)', borderRadius: 6, fontSize: 12, color: 'var(--muted)', marginTop: 8, fontStyle: 'italic', display: 'inline-block' }}>
-                [Diagram unavailable]
+            <div style={{ padding: '6px 12px', background: '#fee2e2', border: '1px solid #ef4444', borderRadius: 6, fontSize: 12, color: '#b91c1c', marginTop: 8, fontFamily: 'monospace', display: 'inline-block' }}>
+                [Diagram error]: {error.toString()}
             </div>
         );
     }
