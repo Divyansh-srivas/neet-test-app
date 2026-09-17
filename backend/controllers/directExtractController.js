@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger.js';
 import { supabaseAdmin } from '../config/supabase.js';
-import { extractQuestionsFromPDFBuffer, normalizeQuestions } from '../services/gemini.service.js';
-import { getTotalPages } from '../services/pdf.service.js';
+import { getTotalPages, splitPdfIntoChunk } from '../services/pdf.service.js';
+import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
 import { config } from '../config/env.js';
 import fs from 'fs';
 import path from 'path';
@@ -88,105 +88,104 @@ export const uploadAndExtractDirect = async (req, res, next) => {
 
                 logger.info(`[DIRECT] Starting extraction: ${totalPages} pages, ${fileBuffer.length} bytes`);
 
-                // Emit socket progress
                 const io = req.app.get('io');
-                if (io) {
-                    io.to(userId).emit('job-progress', { 
-                        jobId, progress: 20, pagesCompleted: 0, totalPages, questionsExtracted: 0,
-                        status: 'AI is analyzing the PDF...' 
-                    });
-                }
-
-                await supabaseAdmin.from('jobs').update({ progress: 20 }).eq('id', jobId);
-
-                // ─── Call Gemini directly ─────────────────────────────────
-                const rawQuestions = await extractQuestionsFromPDFBuffer(fileBuffer);
-                
-                logger.info(`[DIRECT] Gemini returned ${rawQuestions.length} questions`);
-
-                if (rawQuestions.length === 0) {
-                    const errorMsg = `Extraction yielded 0 questions from ${totalPages} pages. Please verify PDF format.`;
-                    await supabaseAdmin.from('jobs').update({ status: 'failed', error_message: errorMsg }).eq('id', jobId);
-                    if (io) io.to(userId).emit('job-failed', { jobId, error: errorMsg });
-                    return;
-                }
-
-                // ─── Process & normalize questions ────────────────────────
-                if (io) {
-                    io.to(userId).emit('job-progress', { 
-                        jobId, progress: 70, pagesCompleted: totalPages, totalPages, 
-                        questionsExtracted: rawQuestions.length, status: 'Processing questions...' 
-                    });
-                }
-
-                const cleanedQuestions = rawQuestions.map(q => {
-                    let optionsObj = {};
-                    if (Array.isArray(q.options)) {
-                        q.options.forEach(opt => {
-                            if (opt && opt.id) optionsObj[opt.id] = opt.text || '';
-                        });
-                    } else if (typeof q.options === 'object' && q.options !== null) {
-                        optionsObj = q.options;
-                    }
-
-                    if (!optionsObj.A) optionsObj.A = 'Option A';
-                    if (!optionsObj.B) optionsObj.B = 'Option B';
-                    if (!optionsObj.C) optionsObj.C = 'Option C';
-                    if (!optionsObj.D) optionsObj.D = 'Option D';
-
-                    return {
-                        id: uuidv4(),
-                        qNum: q.qNum || q.questionNumber || 0,
-                        subject: ['Physics', 'Chemistry', 'Biology'].includes(q.subject) ? q.subject : 'Physics',
-                        chapter: q.chapter || 'Uncategorized',
-                        difficulty: q.difficulty || 'Medium',
-                        question: (q.question || q.questionText || '').trim(),
-                        options: optionsObj,
-                        correct: (q.correct || q.correctAnswer || 'A').toString().toUpperCase().trim(),
-                        explanation: q.explanation || null,
-                        imageBox: q.imageBox || null,
-                        hasDiagram: q.hasDiagram || !!q.imageBox
-                    };
-                }).filter(q => q.question.length > 0);
-
-                // ─── Save questions to DB ─────────────────────────────────
-                if (io) {
-                    io.to(userId).emit('job-progress', { 
-                        jobId, progress: 85, pagesCompleted: totalPages, totalPages, 
-                        questionsExtracted: cleanedQuestions.length, status: 'Saving to database...' 
-                    });
-                }
-
-                for (const q of cleanedQuestions) {
-                    await supabaseAdmin.from('questions').insert({
-                        id: q.id,
-                        job_id: jobId,
-                        q_num: q.qNum,
-                        subject: q.subject,
-                        chapter: q.chapter,
-                        difficulty: q.difficulty,
-                        question_text: q.question,
-                        options: q.options,
-                        correct_option: q.correct,
-                        explanation: q.explanation
-                    });
-                }
-
-                // ─── Get PDF URL ──────────────────────────────────────────
-                await storageUploadPromise.catch(() => {});
-
+                let completedPages = 0;
+                let accumulatedQuestions = [];
                 let pdfUrl = null;
-                const { data: signedData } = await supabaseAdmin.storage
-                    .from('uploads')
-                    .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
 
-                if (signedData?.signedUrl) {
-                    pdfUrl = signedData.signedUrl;
-                } else {
+                // Fire and forget storage upload and generate URL early
+                storageUploadPromise.then(async () => {
+                    const { data: signedData } = await supabaseAdmin.storage
+                        .from('uploads')
+                        .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+                    pdfUrl = signedData?.signedUrl || `/api/pdf/${uploadId}`;
+                }).catch(() => {
                     pdfUrl = `/api/pdf/${uploadId}`;
-                }
+                });
 
-                const questionsWithPdf = cleanedQuestions.map(q => ({ ...q, pdfUrl }));
+                // Set up concurrency
+                const pLimit = (await import('p-limit')).default;
+                const limit = pLimit(2); // Process exactly 2 pages concurrently
+
+                const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
+                    const pageNum = idx + 1;
+                    return limit(async () => {
+                        try {
+                            const pageB64 = await splitPdfIntoChunk(finalPath, pageNum, pageNum);
+                            const pageBuffer = Buffer.from(pageB64, 'base64');
+                            
+                            // 1. Extract from Gemini (Sequential zero-loss retry happens inside here)
+                            const questions = await extractQuestionsFromSinglePage(pageBuffer);
+                            
+                            // 2. Process Diagram Cropping (Non-blocking array)
+                            const cropPromises = questions.map(async (q) => {
+                                if (q.hasDiagram && q.diagramBox) {
+                                    try {
+                                        const { cropPdfRegionToImage } = await import('../services/crop.service.js');
+                                        const croppedImageBuffer = await cropPdfRegionToImage(pageBuffer, q.diagramBox);
+                                        const fileName = `diagrams/${jobId}_p${pageNum}_q${q.qNum}_${Date.now()}.png`;
+                                        
+                                        const { error: uploadError } = await supabaseAdmin.storage
+                                            .from('uploads')
+                                            .upload(fileName, croppedImageBuffer, { contentType: 'image/png', upsert: true });
+
+                                        if (!uploadError) {
+                                            const { data: publicUrlData } = supabaseAdmin.storage
+                                                .from('uploads')
+                                                .getPublicUrl(fileName);
+                                            q.diagramUrl = publicUrlData.publicUrl;
+                                        }
+                                    } catch (cropErr) {
+                                        logger.warn(`Failed to crop diagram for p${pageNum} q${q.qNum}: ${cropErr.message}`);
+                                    }
+                                }
+                            });
+                            
+                            await Promise.all(cropPromises);
+
+                            // 3. Incrementally Persist
+                            for (const q of questions) {
+                                await supabaseAdmin.from('questions').insert({
+                                    id: q.id,
+                                    job_id: jobId,
+                                    q_num: q.qNum,
+                                    subject: q.subject,
+                                    chapter: q.chapter,
+                                    difficulty: q.difficulty,
+                                    question_text: q.question,
+                                    options: q.options,
+                                    correct_option: q.correct,
+                                    explanation: q.explanation,
+                                    diagram_url: q.diagramUrl || null
+                                });
+                            }
+                            
+                            accumulatedQuestions.push(...questions);
+                            completedPages++;
+                            
+                            const progress = Math.min(95, Math.round((completedPages / totalPages) * 100));
+                            await supabaseAdmin.from('jobs').update({ progress }).eq('id', jobId);
+                            
+                            if (io) {
+                                io.to(userId).emit('job-progress', { 
+                                    jobId, progress, pagesCompleted: completedPages, totalPages, 
+                                    questionsExtracted: accumulatedQuestions.length,
+                                    status: `Extracted page ${completedPages}/${totalPages}` 
+                                });
+                            }
+                        } catch (err) {
+                            logger.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
+                        }
+                    });
+                });
+
+                await Promise.all(pageTasks);
+
+                // Wait for the full PDF storage upload to finish just in case
+                await storageUploadPromise.catch(() => {});
+                if (!pdfUrl) pdfUrl = `/api/pdf/${uploadId}`;
+
+                const questionsWithPdf = accumulatedQuestions.map(q => ({ ...q, pdfUrl }));
 
                 // ─── Create test record ───────────────────────────────────
                 const { data: testRecord, error: testErr } = await supabaseAdmin.from('tests').insert({

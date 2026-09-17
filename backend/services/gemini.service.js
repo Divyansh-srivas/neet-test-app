@@ -116,32 +116,27 @@ export function normalizeQuestions(rawQuestions) {
 }
 
 /**
- * Extract ALL questions from a full PDF buffer using Gemini's native PDF parsing.
- * NO local renderers, NO chunking, NO sharp/canvas/pdf-img-convert.
- * Gemini natively reads PDF pages, diagrams, chemical structures, and LaTeX.
- * 
- * For large PDFs (>30 pages), splits into batches to avoid token limits.
+ * Extract ALL questions from a SINGLE PDF PAGE buffer using Gemini's native PDF parsing.
  */
-export const extractQuestionsFromPDFBuffer = async (pdfBuffer, onProgress = null) => {
-    const base64Pdf = pdfBuffer.toString('base64');
+export const extractQuestionsFromSinglePage = async (pagePdfBuffer) => {
+    const base64Pdf = pagePdfBuffer.toString('base64');
     const sizeKB = Math.round(base64Pdf.length / 1024);
     
-    logger.info(`[GEMINI NATIVE] Sending entire PDF to Gemini (${sizeKB} KB base64)`);
+    logger.info(`[GEMINI NATIVE] Sending single PDF page to Gemini (${sizeKB} KB base64)`);
 
     const prompt = `You are an expert NTA NEET exam digitizer and question extractor. 
-Analyze this COMPLETE PDF document and extract EVERY SINGLE multiple choice question from ALL pages.
+Analyze this SINGLE PAGE PDF document and extract EVERY SINGLE multiple choice question from it.
 
 MANDATORY RULES:
-1. Extract ALL questions from EVERY page. Do NOT skip any question.
+1. Extract ALL questions from this page. Do NOT skip any question.
 2. NORMALIZE OPTIONS: Map all option identifiers to "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
 3. LATEX FORMULAS: Retain LaTeX for mathematical terms, physics formulas, and chemical equations ($...$ or $$...$$).
 4. DIAGRAMS & FIGURES: For Physics (circuits, ray diagrams), Chemistry (structural formulas, graphs), and Biology (anatomy diagrams):
    - Set "hasDiagram": true if a figure, graph, or diagram exists for this question.
    - Return normalized bounding box coordinates in "diagramBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000).
-   - Also include "imageBox": { "page": <page_number>, "box": [ymin, xmin, ymax, xmax] } for backward compatibility.
-5. ANSWER KEYS: If answer key or explanation is available in the PDF, extract them. If missing, set "correctAnswer": "A" and "explanation": null.
+5. ANSWER KEYS: If answer key or explanation is available, extract them. If missing, set "correctAnswer": "A" and "explanation": null.
 6. SUBJECT DETECTION: Identify subject as "Physics", "Chemistry", or "Biology" based on the content.
-7. CHAPTER DETECTION: Identify the chapter/topic name if visible in the PDF section headers.
+7. CHAPTER DETECTION: Identify the chapter/topic name if visible.
 
 OUTPUT: Return a valid JSON array of question objects. No markdown fences. No extra text.
 
@@ -153,33 +148,31 @@ OUTPUT: Return a valid JSON array of question objects. No markdown fences. No ex
     "questionText": "Full question text including all sub-parts",
     "hasDiagram": false,
     "diagramBox": null,
-    "diagramUrl": null,
-    "imageBox": null,
-    "options": [
-      { "id": "A", "text": "Option A text" },
-      { "id": "B", "text": "Option B text" },
-      { "id": "C", "text": "Option C text" },
-      { "id": "D", "text": "Option D text" }
-    ],
+    "options": {
+      "A": "Option A text",
+      "B": "Option B text",
+      "C": "Option C text",
+      "D": "Option D text"
+    },
     "correctAnswer": "A",
     "explanation": "Explanation text or null",
     "difficulty": "Medium"
   }
 ]
 
-CRITICAL: Extract EVERY question. Missing even one question is unacceptable.`;
+CRITICAL: Extract EVERY question on this page. Missing even one question is unacceptable.`;
 
-    let allQuestions = [];
     let success = false;
-    let retries = 5;
+    let retries = 3;
     let lastError = null;
+    let extractedQuestions = [];
 
     while (retries > 0 && !success) {
         try {
-            logger.info(`[GEMINI NATIVE] Attempt ${6 - retries}/5 — Calling gemini-2.0-flash with PDF inline data...`);
+            logger.info(`[GEMINI NATIVE] Attempt ${4 - retries}/3 — Calling gemini-1.5-flash with PDF inline data...`);
             
             const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash',
+                model: 'gemini-1.5-flash',
                 contents: [
                     {
                         inlineData: {
@@ -191,7 +184,7 @@ CRITICAL: Extract EVERY question. Missing even one question is unacceptable.`;
                 ],
                 config: {
                     responseMimeType: 'application/json',
-                    maxOutputTokens: 65536
+                    maxOutputTokens: 8192
                 }
             });
             
@@ -203,23 +196,13 @@ CRITICAL: Extract EVERY question. Missing even one question is unacceptable.`;
             }
 
             const rawText = response.text.trim();
-            console.log('=== RAW LLM RESPONSE START ===');
-            console.log(rawText.slice(0, 800));
-            console.log(`=== RAW LLM RESPONSE END (total length: ${rawText.length}) ===`);
-
             const parsedRaw = robustParseQuestions(rawText);
             const normalized = normalizeQuestions(parsedRaw);
             
-            logger.info(`[GEMINI NATIVE] Parsed ${normalized.length} questions from PDF`);
+            logger.info(`[GEMINI NATIVE] Parsed ${normalized.length} questions from page`);
+            extractedQuestions = normalized;
+            success = true;
             
-            if (normalized.length > 0) {
-                allQuestions = normalized;
-                success = true;
-            } else {
-                logger.warn(`[GEMINI NATIVE] 0 questions parsed. Raw response sample: ${rawText.slice(0, 200)}`);
-                retries--;
-                await delay(3000);
-            }
         } catch (e) {
             lastError = e;
             const isRetryable = 
@@ -230,9 +213,9 @@ CRITICAL: Extract EVERY question. Missing even one question is unacceptable.`;
                 (e.message && (e.message.includes('429') || e.message.includes('RESOURCE_EXHAUSTED') || e.message.includes('503') || e.message.includes('overloaded')));
 
             if (isRetryable && retries > 1) {
-                const attempt = 6 - retries;
-                const backoffMs = Math.min(Math.pow(2, attempt) * 2000, 30000);
-                logger.warn(`[GEMINI NATIVE] Rate limit / transient error (${e.status || e.message}). Retrying in ${backoffMs/1000}s... (${retries - 1} retries left)`);
+                const attempt = 4 - retries;
+                const backoffMs = Math.min(Math.pow(2, attempt) * 2000, 10000);
+                logger.warn(`[GEMINI NATIVE] Rate limit / transient error. Retrying in ${backoffMs/1000}s... (${retries - 1} retries left)`);
                 await delay(backoffMs);
                 retries--;
             } else {
@@ -242,15 +225,11 @@ CRITICAL: Extract EVERY question. Missing even one question is unacceptable.`;
         }
     }
 
-    if (allQuestions.length === 0 && lastError) {
-        throw new Error(`Gemini extraction failed after all retries: ${lastError.message}`);
+    if (!success && lastError) {
+        throw new Error(`Gemini extraction failed for page after all retries: ${lastError.message}`);
     }
 
-    return allQuestions;
+    return extractedQuestions;
 };
 
-// Keep backward compatibility — old chunk-based function now just wraps the native one
-export const extractQuestionsFromChunk = async (pdfBase64, textContent = '') => {
-    const buffer = Buffer.from(pdfBase64, 'base64');
-    return extractQuestionsFromPDFBuffer(buffer);
-};
+// Remove extractQuestionsFromPDFBuffer and extractQuestionsFromChunk entirely to prevent their usage
