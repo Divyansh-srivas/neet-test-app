@@ -2,7 +2,8 @@ import { Worker } from 'bullmq';
 import { getRedisConnection, queues } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
-import { extractQuestionsFromPDFBuffer } from '../services/gemini.service.js';
+import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
+import { getTotalPages, splitPdfIntoChunk } from '../services/pdf.service.js';
 import fs from 'fs/promises';
 
 export const createAiWorker = (io) => {
@@ -42,33 +43,59 @@ export const createAiWorker = (io) => {
                 status: 'AI is analyzing the PDF...'
             });
 
-            // ─── STEP 4: Send ENTIRE PDF to Gemini natively ─────────────
-            // NO chunking, NO local image conversion, NO sharp/canvas.
-            // Gemini reads the PDF pages directly including diagrams.
-            logger.info(`[AI WORKER] Sending entire PDF to Gemini (${totalPages} pages)...`);
-            
-            const allExtractedRaw = await extractQuestionsFromPDFBuffer(pdfBuffer, (progressUpdate) => {
-                // Optional progress callback from the extraction function
-                if (progressUpdate) {
-                    io.to(userId).emit('job-progress', { 
-                        jobId, 
-                        progress: Math.min(25 + Math.round(progressUpdate * 40), 65),
-                        pagesCompleted: Math.round(progressUpdate * totalPages), 
-                        totalPages,
-                        questionsExtracted: 0,
-                        status: 'AI is extracting questions...'
-                    });
-                }
+            // ─── STEP 4: Sequential Page-by-Page Extraction ─────────────
+            console.log(`[WORKER] Loading PDF to count pages...`);
+            const totalPages = await getTotalPages(filePath);
+            console.log(`[WORKER] Total pages found: ${totalPages}`);
+
+            await supabase.from('jobs').update({ total_pages: totalPages }).eq('id', jobId);
+
+            let allExtractedRaw = [];
+            let completedPages = 0;
+
+            const pLimit = (await import('p-limit')).default;
+            const limit = pLimit(2);
+
+            const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
+                const pageNum = idx + 1;
+                return limit(async () => {
+                    console.log(`[WORKER] ---> Slicing Page ${pageNum}/${totalPages}`);
+                    try {
+                        const pageB64 = await splitPdfIntoChunk(filePath, pageNum, pageNum);
+                        const pageBuffer = Buffer.from(pageB64, 'base64');
+                        
+                        console.log(`[WORKER] Sending Page ${pageNum} to Gemini (${pageBuffer.length} bytes)...`);
+                        const questions = await extractQuestionsFromSinglePage(pageBuffer);
+                        console.log(`[WORKER] Page ${pageNum} extracted: ${questions.length} questions`);
+
+                        allExtractedRaw.push(...questions);
+                        completedPages++;
+
+                        const currentPercent = Math.min(95, Math.round((completedPages / totalPages) * 100));
+                        await supabase.from('jobs').update({ progress: currentPercent }).eq('id', jobId);
+                        
+                        io.to(userId).emit('job-progress', { 
+                            jobId, 
+                            progress: currentPercent,
+                            pagesCompleted: completedPages, 
+                            totalPages,
+                            questionsExtracted: allExtractedRaw.length,
+                            status: `Extracted page ${completedPages}/${totalPages}`
+                        });
+                    } catch (err) {
+                        console.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
+                    }
+                });
             });
 
+            await Promise.all(pageTasks);
+
             // ─── STEP 5: Validate extraction results ────────────────────
-            console.log(`[AI WORKER] Extraction complete. Total questions recovered: ${allExtractedRaw.length}`);
+            console.log(`[WORKER COMPLETE] All pages extracted for ${jobId}. Total questions: ${allExtractedRaw.length}`);
             
             if (allExtractedRaw.length === 0) {
-                const debugInfo = `TotalPages: ${totalPages}, PDFSize: ${pdfBuffer.length} bytes`;
-                const errorMsg = `Extraction yielded 0 questions (${debugInfo}). The Gemini API processed the PDF but found no parseable MCQs. Please verify the PDF contains standard NEET MCQ format.`;
+                const errorMsg = `Extraction yielded 0 questions from ${totalPages} pages. Please verify the PDF contains standard NEET MCQ format.`;
                 console.error(`[CRITICAL] ${errorMsg}`);
-                logger.error(`[AI WORKER] ${errorMsg}`);
                 throw new Error(errorMsg);
             }
 
