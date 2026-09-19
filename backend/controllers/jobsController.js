@@ -9,12 +9,15 @@ export const getJobs = async (req, res, next) => {
             return res.status(200).json({ success: true, jobs: [] });
         }
         
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        
         const { data: jobs, error } = await supabase
             .from('jobs')
             .select('*')
             .eq('user_id', userId)
+            .gte('created_at', thirtyMinutesAgo)
             .order('created_at', { ascending: false })
-            .limit(10); // add a limit to prevent huge payloads
+            .limit(10); // only fetch recent active jobs to prevent stalled jobs from showing up
 
         if (error) {
             console.warn('[Jobs Route DB Warning]:', error.message);
