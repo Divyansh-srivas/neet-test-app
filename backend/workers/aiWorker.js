@@ -45,8 +45,9 @@ export const createAiWorker = (io) => {
             });
 
             // ─── STEP 4: Sequential Page-by-Page Extraction ─────────────
-            console.log(`[WORKER] Loading PDF to count pages...`);
-            const totalPages = await getTotalPages(filePath);
+            const pdfBytes = await fs.readFile(filePath);
+            const loadedPdfDoc = await PDFDocument.load(pdfBytes);
+            const totalPages = loadedPdfDoc.getPageCount();
             console.log(`[WORKER] Total pages found: ${totalPages}`);
 
             await supabase.from('jobs').update({ total_pages: totalPages }).eq('id', jobId);
@@ -54,9 +55,8 @@ export const createAiWorker = (io) => {
             let allExtractedRaw = [];
             let completedPages = 0;
 
-            // Load the entire PDF AST once into memory to prevent massive OOM kills
-            console.log(`[WORKER] Parsing AST for slicing...`);
-            const loadedPdfDoc = await PDFDocument.load(await fs.readFile(filePath));
+            // The AST is already loaded in loadedPdfDoc above
+            console.log(`[WORKER] Using loaded AST for slicing...`);
 
             // Process pages with a simple native concurrency limit
             const concurrency = 2; // Reduced back to 2 to safely balance CPU/RAM on Render

@@ -90,7 +90,9 @@ export const uploadAndExtractDirect = async (req, res, next) => {
 
             try {
                 console.log(`[WORKER] Loading PDF with pdf-lib to count pages...`);
-                const totalPages = await getTotalPages(finalPath);
+                const pdfBytes = fs.readFileSync(finalPath);
+                const loadedPdfDoc = await PDFDocument.load(pdfBytes);
+                const totalPages = loadedPdfDoc.getPageCount();
                 console.log(`[WORKER] Total pages found: ${totalPages}`);
                 
                 // Set total pages in DB
@@ -113,10 +115,8 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                     pdfUrl = `/api/pdf/${uploadId}`;
                 });
 
-                // Load the entire PDF AST once into memory to prevent massive OOM kills
-                console.log(`[WORKER] Parsing AST for slicing...`);
-                const pdfBytes = fs.readFileSync(finalPath);
-                const loadedPdfDoc = await PDFDocument.load(pdfBytes);
+                // The AST is already loaded in loadedPdfDoc above
+                console.log(`[WORKER] Using loaded AST for slicing...`);
                 
                 // Process pages with a simple native concurrency limit
                 const concurrency = 2; // Reduced back to 2 to safely balance CPU/RAM on Render
