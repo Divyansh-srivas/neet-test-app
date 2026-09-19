@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger.js';
 import { supabaseAdmin } from '../config/supabase.js';
-import { getTotalPages, splitPdfIntoChunk } from '../services/pdf.service.js';
+import { getTotalPages, splitPdfDocIntoChunk } from '../services/pdf.service.js';
+import { PDFDocument } from 'pdf-lib';
 import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
 import { config } from '../config/env.js';
 import fs from 'fs';
@@ -112,16 +113,21 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                     pdfUrl = `/api/pdf/${uploadId}`;
                 });
 
-                // Set up concurrency - User has billing enabled, increasing limit for speed
-                const pLimit = (await import('p-limit')).default;
-                const limit = pLimit(3); // Process 3 pages concurrently
-
-                const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
-                    const pageNum = idx + 1;
-                    return limit(async () => {
-                        console.log(`[WORKER] ---> Slicing Page ${pageNum}/${totalPages}`);
+                // Load the entire PDF AST once into memory to prevent massive OOM kills
+                console.log(`[WORKER] Parsing AST for slicing...`);
+                const pdfBytes = fs.readFileSync(finalPath);
+                const loadedPdfDoc = await PDFDocument.load(pdfBytes);
+                
+                // Process pages with a simple native concurrency limit
+                const concurrency = 2; // Reduced back to 2 to safely balance CPU/RAM on Render
+                for (let i = 0; i < totalPages; i += concurrency) {
+                    const chunk = Array.from({ length: Math.min(concurrency, totalPages - i) }, (_, idx) => i + idx + 1);
+                    
+                    const pageTasks = chunk.map(pageNum => {
+                        return (async () => {
+                            console.log(`[WORKER] ---> Slicing Page ${pageNum}/${totalPages}`);
                         try {
-                            const pageB64 = await splitPdfIntoChunk(finalPath, pageNum, pageNum);
+                            const pageB64 = await splitPdfDocIntoChunk(loadedPdfDoc, pageNum, pageNum);
                             const pageBuffer = Buffer.from(pageB64, 'base64');
                             
                             console.log(`[WORKER] Sending Page ${pageNum} to Gemini (${pageBuffer.length} bytes)...`);
@@ -189,10 +195,11 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                             console.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
                             throw err; // Re-throw to make the Promise.all fail early if a page totally fails
                         }
+                        })();
                     });
-                });
 
-                await Promise.all(pageTasks);
+                    await Promise.all(pageTasks);
+                }
 
                 if (accumulatedQuestions.length === 0) {
                     throw new Error("Extraction completed but 0 questions were found. The Gemini API might be overloaded or the PDF contains no parseable MCQs.");

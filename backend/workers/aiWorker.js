@@ -3,7 +3,8 @@ import { getRedisConnection, queues } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
-import { getTotalPages, splitPdfIntoChunk } from '../services/pdf.service.js';
+import { getTotalPages, splitPdfDocIntoChunk } from '../services/pdf.service.js';
+import { PDFDocument } from 'pdf-lib';
 import fs from 'fs/promises';
 
 export const createAiWorker = (io) => {
@@ -53,15 +54,20 @@ export const createAiWorker = (io) => {
             let allExtractedRaw = [];
             let completedPages = 0;
 
-            const pLimit = (await import('p-limit')).default;
-            const limit = pLimit(3); // User has billing enabled, increasing limit for speed
+            // Load the entire PDF AST once into memory to prevent massive OOM kills
+            console.log(`[WORKER] Parsing AST for slicing...`);
+            const loadedPdfDoc = await PDFDocument.load(await fs.readFile(filePath));
 
-            const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
-                const pageNum = idx + 1;
-                return limit(async () => {
-                    console.log(`[WORKER] ---> Slicing Page ${pageNum}/${totalPages}`);
+            // Process pages with a simple native concurrency limit
+            const concurrency = 2; // Reduced back to 2 to safely balance CPU/RAM on Render
+            for (let i = 0; i < totalPages; i += concurrency) {
+                const chunk = Array.from({ length: Math.min(concurrency, totalPages - i) }, (_, idx) => i + idx + 1);
+                
+                const pageTasks = chunk.map(pageNum => {
+                    return (async () => {
+                        console.log(`[WORKER] ---> Slicing Page ${pageNum}/${totalPages}`);
                     try {
-                        const pageB64 = await splitPdfIntoChunk(filePath, pageNum, pageNum);
+                        const pageB64 = await splitPdfDocIntoChunk(loadedPdfDoc, pageNum, pageNum);
                         const pageBuffer = Buffer.from(pageB64, 'base64');
                         
                         console.log(`[WORKER] Sending Page ${pageNum} to Gemini (${pageBuffer.length} bytes)...`);
@@ -86,10 +92,11 @@ export const createAiWorker = (io) => {
                         console.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
                         throw err; // Fail early if API crashes completely
                     }
+                    })();
                 });
-            });
 
-            await Promise.all(pageTasks);
+                await Promise.all(pageTasks);
+            }
 
             // ─── STEP 5: Validate extraction results ────────────────────
             console.log(`[WORKER COMPLETE] All pages extracted for ${jobId}. Total questions: ${allExtractedRaw.length}`);
