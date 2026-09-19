@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
 import { getTotalPages, splitPdfIntoChunk, releasePdf } from '../services/pdf.service.js';
+import { ensureLocalFile } from '../services/storageSync.js';
 
 export const createAiWorker = (io) => {
     return new Worker('ai-extraction', async job => {
@@ -11,6 +12,11 @@ export const createAiWorker = (io) => {
         const supabase = supabaseAdmin;
         
         try {
+            // Render's disk is ephemeral — a container restart between the
+            // pdfWorker step and here (or mid-loop below) wipes the local
+            // file even though this BullMQ job survives and gets retried.
+            await ensureLocalFile(filePath, storagePath);
+
             const totalPages = await getTotalPages(filePath);
             const chunkTasks = Math.ceil(totalPages / parseInt(process.env.PDF_CHUNK_SIZE || '2'));
             
@@ -32,6 +38,7 @@ export const createAiWorker = (io) => {
                 const endPage = Math.min(i + chunkSize, totalPages);
                 
                 try {
+                    await ensureLocalFile(filePath, storagePath);
                     const pageBufferB64 = await splitPdfIntoChunk(filePath, startPage, endPage);
                     const pageBuffer = Buffer.from(pageBufferB64, 'base64');
                     

@@ -38,8 +38,16 @@ export const uploadPdf = async (req, res, next) => {
             });
 
         if (storageError) {
-            logger.warn(`Failed to upload to Supabase Storage: ${storageError.message}`);
-            // Continue processing locally even if storage fails, to ensure robustness
+            logger.error(`Failed to upload to Supabase Storage: ${storageError.message}`);
+            // This MUST succeed: Render's local disk is ephemeral, so if the
+            // background worker container restarts mid-job, Supabase Storage
+            // is the only place the PDF can be recovered from. Failing here
+            // is safer than silently continuing and hitting an unrecoverable
+            // ENOENT later, deep inside the extraction pipeline.
+            try { fs.unlinkSync(finalPath); } catch (_) {}
+            return res.status(502).json({
+                error: 'Failed to store the PDF durably (Supabase Storage upload failed). Please try again.'
+            });
         }
         
         // Satisfy the foreign key constraint by creating an upload record

@@ -3,6 +3,7 @@ import { getRedisConnection, queues } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { splitPdfIntoChunk, getTotalPages } from '../services/pdf.service.js';
+import { ensureLocalFile } from '../services/storageSync.js';
 
 export const createPdfWorker = (io) => {
     return new Worker('pdf-upload', async job => {
@@ -12,6 +13,10 @@ export const createPdfWorker = (io) => {
         io.to(userId).emit('job-started', { jobId: job.id });
         
         try {
+            // Render's disk is ephemeral — recover the file from Supabase
+            // Storage if a container restart wiped it before this ran.
+            await ensureLocalFile(filePath, storagePath);
+
             // 1. Create Job Record in DB
             const { data: jobRecord, error: jobErr } = await supabase.from('jobs').insert({
                 id: job.id,
