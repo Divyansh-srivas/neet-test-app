@@ -131,9 +131,9 @@ MANDATORY RULES:
 1. Extract ALL questions from this page. Do NOT skip any question.
 2. NORMALIZE OPTIONS: Map all option identifiers to "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
 3. LATEX FORMULAS: Retain LaTeX for mathematical terms, physics formulas, and chemical equations ($...$ or $$...$$).
-4. DIAGRAMS & FIGURES: For Physics (circuits, ray diagrams), Chemistry (structural formulas, graphs), and Biology (anatomy diagrams):
-   - Set "hasDiagram": true if a figure, graph, or diagram exists for this question.
-   - Return normalized bounding box coordinates in "diagramBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000).
+4. DIAGRAMS & FIGURES: Only set 'imageBox' when the question contains an actual VISUAL element that cannot be represented as text: a photograph, drawn diagram, anatomical figure, graph/chart, chemical structure drawing, or circuit/physics diagram.
+   Do NOT set imageBox for: MCQ option tables, statement/assertion tables (Column I / Column II match tables), or any content that is plain text arranged in a table layout — that content must instead be captured accurately in the 'question' and 'options' text fields. When in doubt, omit imageBox.
+   If valid, return normalized bounding box coordinates in "imageBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000), and set "hasDiagram": true.
 5. ANSWER KEYS: If answer key or explanation is available, extract them. If missing, set "correctAnswer": "A" and "explanation": null.
 6. SUBJECT DETECTION: Identify subject as "Physics", "Chemistry", or "Biology" based on the content.
 7. CHAPTER DETECTION: Identify the chapter/topic name if visible.
@@ -147,7 +147,7 @@ OUTPUT: Return a valid JSON array of question objects. No markdown fences. No ex
     "chapter": "Kinematics",
     "questionText": "Full question text including all sub-parts",
     "hasDiagram": false,
-    "diagramBox": null,
+    "imageBox": null,
     "options": {
       "A": "Option A text",
       "B": "Option B text",

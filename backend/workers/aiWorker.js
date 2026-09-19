@@ -18,7 +18,7 @@ export const createAiWorker = (io) => {
             await ensureLocalFile(filePath, storagePath);
 
             const totalPages = await getTotalPages(filePath);
-            const chunkTasks = Math.ceil(totalPages / parseInt(process.env.PDF_CHUNK_SIZE || '2'));
+            const chunkTasks = Math.ceil(totalPages / parseInt(process.env.PDF_CHUNK_SIZE || '1'));
             
             logger.info(`[aiWorker] START job=${jobId} bullId=${job.id} attempt=${job.attemptsMade} totalPages=${totalPages}`);
             logger.info(`[aiWorker] job=${jobId} -> ${chunkTasks} chunks`);
@@ -30,7 +30,7 @@ export const createAiWorker = (io) => {
 
             let allExtractedRaw = [];
             let completedPages = 0;
-            const chunkSize = parseInt(process.env.PDF_CHUNK_SIZE || '2');
+            const chunkSize = parseInt(process.env.PDF_CHUNK_SIZE || '1');
 
             for (let i = 0; i < totalPages; i += chunkSize) {
                 const chunkIdx = Math.floor(i / chunkSize) + 1;
