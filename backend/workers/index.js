@@ -23,7 +23,8 @@ export const startAllWorkers = (io) => {
             const w = fn(io);
             if (w) {
                 w.on('failed', (job, err) => {
-                    logger.error(`Job ${job?.id} failed in worker ${w.name}: ${err.message}`);
+                    const jobId = job ? job.id : 'unknown';
+                    logger.error(`Job ${jobId} failed in worker ${w.name}: ${err.message}`);
                 });
                 w.on('error', (err) => {
                     logger.warn(`Worker ${w.name} connection warning: ${err.message}`);

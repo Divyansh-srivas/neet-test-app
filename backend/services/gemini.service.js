@@ -163,16 +163,21 @@ OUTPUT: Return a valid JSON array of question objects. No markdown fences. No ex
 CRITICAL: Extract EVERY question on this page. Missing even one question is unacceptable.`;
 
     let success = false;
-    let retries = 3;
+    let retries = 4;
     let lastError = null;
     let extractedQuestions = [];
 
     while (retries > 0 && !success) {
+        let abortController = new AbortController();
+        let timeoutId = setTimeout(() => abortController.abort('TIMEOUT'), 120000); // 120s hard timeout
+        
         try {
-            logger.info(`[GEMINI NATIVE] Attempt ${4 - retries}/3 — Calling gemini-1.5-flash with PDF inline data...`);
+            const attempt = 5 - retries;
+            const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+            logger.info(`[GEMINI NATIVE] Attempt ${attempt}/4 — Calling ${modelName} with PDF inline data...`);
             
             const response = await ai.models.generateContent({
-                model: 'gemini-1.5-flash',
+                model: modelName,
                 contents: [
                     {
                         inlineData: {
@@ -186,8 +191,10 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                     responseMimeType: 'application/json',
                     maxOutputTokens: 8192
                 }
-            });
+            }, { signal: abortController.signal });
             
+            clearTimeout(timeoutId);
+
             if (!response || !response.text) {
                 logger.warn('[GEMINI NATIVE] Empty response from Gemini. Retrying...');
                 retries--;
@@ -203,24 +210,16 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
             extractedQuestions = normalized;
             success = true;
             
-        } catch (e) {
-            lastError = e;
-            const isRetryable = 
-                e.status === 429 || 
-                e.status === 503 || 
-                e.status === 500 || 
-                e.status === 504 ||
-                (e.message && (e.message.includes('429') || e.message.includes('RESOURCE_EXHAUSTED') || e.message.includes('503') || e.message.includes('overloaded')));
-
-            if (isRetryable && retries > 1) {
-                const attempt = 4 - retries;
-                const backoffMs = Math.min(Math.pow(2, attempt) * 2000, 10000);
-                logger.warn(`[GEMINI NATIVE] Rate limit / transient error. Retrying in ${backoffMs/1000}s... (${retries - 1} retries left)`);
-                await delay(backoffMs);
-                retries--;
-            } else {
-                logger.error(`[GEMINI NATIVE] Fatal error: ${e.message}`);
-                retries = 0;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            lastError = error;
+            logger.warn(`[GEMINI NATIVE] Attempt ${5 - retries} failed: ${error.message || error}`);
+            retries--;
+            if (retries > 0) {
+                // Exponential backoff: 2s, 4s, 8s
+                const delayMs = Math.min((2 ** (4 - retries)) * 1000, 40000);
+                logger.warn(`[GEMINI NATIVE] Retrying in ${delayMs/1000}s...`);
+                await delay(delayMs);
             }
         }
     }
