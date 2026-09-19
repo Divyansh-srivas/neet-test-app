@@ -19,7 +19,7 @@ export const uploadAndExtractDirect = async (req, res) => {
         }
 
         const uploadId = uuidv4();
-        const jobId = `job_${uploadId}`;
+        const jobId = uuidv4();
         const finalPath = file.path;
 
         // Ensure database insertion doesn't block the instant 200 OK response
