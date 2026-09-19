@@ -54,7 +54,7 @@ export const createAiWorker = (io) => {
             let completedPages = 0;
 
             const pLimit = (await import('p-limit')).default;
-            const limit = pLimit(1); // Reduced to 1 to avoid API overload
+            const limit = pLimit(3); // User has billing enabled, increasing limit for speed
 
             const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
                 const pageNum = idx + 1;

@@ -112,9 +112,9 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                     pdfUrl = `/api/pdf/${uploadId}`;
                 });
 
-                // Set up concurrency - reduce to 1 to prevent Gemini Free Tier 'overloaded' errors
+                // Set up concurrency - User has billing enabled, increasing limit for speed
                 const pLimit = (await import('p-limit')).default;
-                const limit = pLimit(1); // Process exactly 1 page concurrently
+                const limit = pLimit(3); // Process 3 pages concurrently
 
                 const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
                     const pageNum = idx + 1;
