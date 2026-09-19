@@ -4,7 +4,6 @@ import fs from 'fs';
 import { authenticate } from '../middlewares/auth.js';
 import { apiLimiter, uploadLimiter } from '../middlewares/rateLimiter.js';
 import { uploadPdf } from '../controllers/uploadController.js';
-import { uploadAndExtractDirect } from '../controllers/directExtractController.js';
 import { getJobs, getJobStatus, deleteJob } from '../controllers/jobsController.js';
 import { getNotes, saveNotes } from '../controllers/notesController.js';
 import { getProfile, updateProfile } from '../controllers/profileController.js';
@@ -33,8 +32,8 @@ const upload = multer({
 router.use(authenticate);
 router.use(apiLimiter);
 
-// Upload API — uses direct extraction (no Redis/BullMQ dependency)
-router.post('/upload', uploadLimiter, upload.single('file'), uploadAndExtractDirect);
+// Upload API
+router.post('/upload', uploadLimiter, upload.single('file'), uploadPdf);
 
 // Jobs API
 router.get('/jobs', getJobs);

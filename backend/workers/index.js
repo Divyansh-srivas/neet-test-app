@@ -29,6 +29,15 @@ export const startAllWorkers = (io) => {
                 w.on('error', (err) => {
                     logger.warn(`Worker ${w.name} connection warning: ${err.message}`);
                 });
+                w.on('active', (job) => {
+                    logger.info(`Worker ${w.name} active for job ${job.id}`);
+                });
+                w.on('completed', (job) => {
+                    logger.info(`Worker ${w.name} completed job ${job.id}`);
+                });
+                w.on('stalled', (jobId) => {
+                    logger.warn(`⚠️ Job ${jobId} STALLED in worker ${w.name} (event loop blocked?)`);
+                });
                 startedWorkers.push(w);
             }
         } catch (err) {

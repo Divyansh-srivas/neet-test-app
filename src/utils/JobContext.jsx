@@ -25,27 +25,51 @@ export function JobProvider({ children }) {
       newSocket.emit('join', user.uid);
     });
 
+    newSocket.on('reconnect', () => {
+      console.log('Reconnected to backend socket. Re-joining room...');
+      newSocket.emit('join', user.uid);
+    });
+
+    newSocket.on('disconnect', (reason) => {
+      console.warn('Disconnected from backend socket:', reason);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('Socket connect error:', error.message);
+    });
+
     if (newSocket.connected) {
       newSocket.emit('join', user.uid);
     }
 
-    newSocket.on('job-started', (data) => {
-        setActiveJobs(prev => ({
-            ...prev,
-            [data.jobId]: { ...prev[data.jobId], status: 'processing', progress: prev[data.jobId]?.progress || 0 }
+    const mergeJob = (prevJobs, jobId, patch) => {
+      const old = prevJobs[jobId] || {};
+      const newProgress = Math.max(old.progress || 0, patch.progress ?? 0);
+      return {
+          ...prevJobs,
+          [jobId]: { ...old, ...patch, progress: newProgress }
+      };
+    };
+
+    newSocket.on('upload-progress', (data) => {
+        setActiveJobs(prev => mergeJob(prev, data.jobId, {
+            status: 'uploading',
+            progress: data.progress,
+            statusText: 'Uploading PDF...'
         }));
     });
 
+    newSocket.on('job-started', (data) => {
+        setActiveJobs(prev => mergeJob(prev, data.jobId, { status: 'processing' }));
+    });
+
     newSocket.on('job-progress', (data) => {
-        setActiveJobs(prev => ({
-            ...prev,
-            [data.jobId]: { 
-                status: 'processing', 
-                progress: data.progress,
-                pagesCompleted: data.pagesCompleted,
-                totalPages: data.totalPages,
-                questionsExtracted: data.questionsExtracted
-            }
+        setActiveJobs(prev => mergeJob(prev, data.jobId, { 
+            status: 'processing', 
+            progress: data.progress,
+            pagesCompleted: data.pagesCompleted,
+            totalPages: data.totalPages,
+            questionsExtracted: data.questionsExtracted
         }));
     });
 
@@ -65,10 +89,7 @@ export function JobProvider({ children }) {
             }, 500);
         }
 
-        setActiveJobs(prev => ({
-            ...prev,
-            [data.jobId]: { ...prev[data.jobId], status: 'completed', progress: 100 }
-        }));
+        setActiveJobs(prev => mergeJob(prev, data.jobId, { status: 'completed', progress: 100 }));
     });
 
     newSocket.on('job-failed', (data) => {
@@ -88,7 +109,7 @@ export function JobProvider({ children }) {
     fetchExistingJobs();
 
     let consecutiveErrors = 0;
-    // 3-second Polling fallback for guaranteed UI updates even without WebSockets
+    // 10-second Polling fallback for guaranteed UI updates even without WebSockets
     const pollInterval = setInterval(async () => {
         try {
             await fetchExistingJobs();
@@ -101,7 +122,7 @@ export function JobProvider({ children }) {
                 clearInterval(pollInterval);
             }
         }
-    }, 3000);
+    }, 10000);
 
     return () => {
         clearInterval(pollInterval);
@@ -118,9 +139,10 @@ export function JobProvider({ children }) {
               const updated = { ...prev };
               data.jobs.forEach(job => {
                   if (job.status === 'processing' || job.status === 'queued') {
+                      const newProgress = Math.max(updated[job.id]?.progress || 0, job.progress || 0);
                       updated[job.id] = {
                           status: job.status,
-                          progress: job.progress || 0,
+                          progress: newProgress,
                           pagesCompleted: job.pages_completed || 0,
                           totalPages: job.total_pages || 0,
                           questionsExtracted: job.extracted_questions || 0

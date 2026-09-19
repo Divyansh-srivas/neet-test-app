@@ -1,9 +1,24 @@
 import { PDFDocument } from 'pdf-lib';
 import fs from 'fs/promises';
 
-export const splitPdfIntoChunk = async (filePath, startPage, endPage) => {
+const pdfCache = new Map();
+
+const getCachedPdf = async (filePath) => {
+    if (pdfCache.has(filePath)) {
+        return pdfCache.get(filePath);
+    }
     const pdfBytes = await fs.readFile(filePath);
     const pdfDoc = await PDFDocument.load(pdfBytes);
+    pdfCache.set(filePath, pdfDoc);
+    return pdfDoc;
+};
+
+export const releasePdf = (filePath) => {
+    pdfCache.delete(filePath);
+};
+
+export const splitPdfIntoChunk = async (filePath, startPage, endPage) => {
+    const pdfDoc = await getCachedPdf(filePath);
     return splitPdfDocIntoChunk(pdfDoc, startPage, endPage);
 };
 
@@ -18,7 +33,6 @@ export const splitPdfDocIntoChunk = async (pdfDoc, startPage, endPage) => {
 };
 
 export const getTotalPages = async (filePath) => {
-    const pdfBytes = await fs.readFile(filePath);
-    const pdfDoc = await PDFDocument.load(pdfBytes);
+    const pdfDoc = await getCachedPdf(filePath);
     return pdfDoc.getPageCount();
 };

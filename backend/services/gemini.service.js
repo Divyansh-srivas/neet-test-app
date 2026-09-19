@@ -213,19 +213,29 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
         } catch (error) {
             clearTimeout(timeoutId);
             lastError = error;
-            logger.warn(`[GEMINI NATIVE] Attempt ${5 - retries} failed: ${error.message || error}`);
+            const errStr = (error.message || error).toString();
+            logger.warn(`[GEMINI NATIVE] Attempt ${5 - retries} failed: ${errStr}`);
+            
+            const isFatal = errStr.includes('quota') || errStr.includes('billing') || errStr.includes('depleted');
+            if (isFatal) {
+                logger.error(`[GEMINI NATIVE] Fatal quota error, aborting retries.`);
+                retries = 0;
+                break;
+            }
+
             retries--;
             if (retries > 0) {
-                // Exponential backoff: 2s, 4s, 8s
-                const delayMs = Math.min((2 ** (4 - retries)) * 1000, 40000);
+                const attempt = 5 - retries;
+                const delayMs = Math.min(5000 * Math.pow(2, attempt - 1), 40000);
                 logger.warn(`[GEMINI NATIVE] Retrying in ${delayMs/1000}s...`);
                 await delay(delayMs);
             }
         }
     }
 
-    if (!success && lastError) {
-        throw new Error(`Gemini extraction failed for page after all retries: ${lastError.message}`);
+    if (!success) {
+        logger.error(`[GEMINI NATIVE] Failed after all retries. Last error: ${lastError?.message || lastError}`);
+        return []; // Do not throw, allow other chunks to proceed
     }
 
     return extractedQuestions;
