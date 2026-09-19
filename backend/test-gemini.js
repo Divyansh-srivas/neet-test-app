@@ -15,4 +15,4 @@ async function test(modelName) {
         console.error("Error for", modelName, ":", e.status, e.message);
     }
 }
-test('gemini-flash-latest');
+test('gemini-3.6-flash');

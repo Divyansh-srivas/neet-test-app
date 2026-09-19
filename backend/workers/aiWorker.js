@@ -43,7 +43,7 @@ export const createAiWorker = (io) => {
                     const pageBuffer = Buffer.from(pageBufferB64, 'base64');
                     
                     const startTime = Date.now();
-                    logger.info(`[gemini] job=${jobId} chunk ${chunkIdx}/${chunkTasks} (p${startPage}-p${endPage}) attempt 1/4 (model=${process.env.GEMINI_MODEL || 'gemini-2.5-flash'})`);
+                    logger.info(`[gemini] job=${jobId} chunk ${chunkIdx}/${chunkTasks} (p${startPage}-p${endPage}) attempt 1/4 (model=${process.env.GEMINI_MODEL || 'gemini-3.6-flash'})`);
                     
                     const questions = await extractQuestionsFromSinglePage(pageBuffer);
                     

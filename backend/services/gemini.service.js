@@ -173,7 +173,7 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
         
         try {
             const attempt = 5 - retries;
-            const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+            const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
             logger.info(`[GEMINI NATIVE] Attempt ${attempt}/4 — Calling ${modelName} with PDF inline data...`);
             
             const response = await ai.models.generateContent({
