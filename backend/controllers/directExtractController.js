@@ -22,7 +22,20 @@ export const uploadAndExtractDirect = async (req, res) => {
         const jobId = uuidv4();
         const finalPath = file.path;
 
-        // Ensure database insertion doesn't block the instant 200 OK response
+        // 1. Satisfy the foreign key constraint by creating an upload record first
+        const { error: uploadInsertErr } = await supabaseAdmin.from('uploads').insert({
+            id: uploadId,
+            user_id: userId,
+            original_name: req.file.originalname || 'upload.pdf',
+            file_path: `${userId}/${uploadId}.pdf`
+        });
+
+        if (uploadInsertErr) {
+            logger.error(`[DIRECT] Upload insert failed: ${uploadInsertErr.message}`);
+            return res.status(500).json({ error: 'Failed to initialize upload record' });
+        }
+
+        // 2. Ensure database insertion doesn't block the instant 200 OK response
         const { error: jobInsertErr } = await supabaseAdmin.from('jobs').insert({
             id: jobId,
             user_id: userId,
