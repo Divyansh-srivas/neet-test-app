@@ -6,63 +6,23 @@ import { PDFDocument } from 'pdf-lib';
 import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
 import { config } from '../config/env.js';
 import fs from 'fs';
-import path from 'path';
 
-/**
- * Direct PDF upload + extraction — NO BullMQ/Redis dependency.
- * Reads file → sends to Gemini → saves to DB → returns result.
- * Used for local dev and as fallback when Redis is unavailable.
- */
-export const uploadAndExtractDirect = async (req, res, next) => {
-    const startTime = Date.now();
-    let jobId = null;
-
+export const uploadAndExtractDirect = async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No PDF file uploaded' });
-        }
-
+        const file = req.file;
+        const testName = req.body.testName || 'Untitled Test';
+        const duration = parseInt(req.body.duration) || 120;
         const userId = req.user.id;
-        const { testName, duration } = req.body;
+
+        if (!file) {
+            return res.status(400).json({ error: 'No PDF file provided.' });
+        }
+
         const uploadId = uuidv4();
-        jobId = uuidv4();
+        const jobId = `job_${uploadId}`;
+        const finalPath = file.path;
 
-        // ─── 1. Save file locally ────────────────────────────────────
-        const uploadDir = path.resolve('uploads');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        const finalPath = path.join(uploadDir, `${uploadId}.pdf`);
-        fs.renameSync(req.file.path, finalPath);
-
-        logger.info(`[DIRECT] PDF saved: ${finalPath}`);
-
-        // ─── 2. Upload to Supabase Storage ───────────────────────────
-        const fileBuffer = fs.readFileSync(finalPath);
-        const storagePath = `${userId}/${uploadId}.pdf`;
-        
-        const storageUploadPromise = supabaseAdmin.storage
-            .from('uploads')
-            .upload(storagePath, fileBuffer, { contentType: 'application/pdf', upsert: true })
-            .then(({ error }) => { if (error) logger.warn(`Storage upload warning: ${error.message}`); })
-            .catch((err) => logger.warn(`Storage upload catch: ${err.message}`));
-
-        // ─── 3. Create upload + job records ──────────────────────────
-        const { data: uploadRecord, error: uploadInsertErr } = await supabaseAdmin.from('uploads').insert([{
-            id: uploadId,
-            user_id: userId,
-            original_name: req.file.originalname || 'upload.pdf',
-            file_path: storagePath
-        }]).select().single();
-
-        if (uploadInsertErr) {
-            console.error('[Upload Record Insert Failed]:', uploadInsertErr.message, uploadInsertErr.details);
-            return res.status(500).json({ 
-                error: `Failed to create upload record: ${uploadInsertErr.message}`, 
-                hint: "Check SUPABASE_SERVICE_ROLE_KEY environment variable on Render"
-            });
-        }
-
+        // Ensure database insertion doesn't block the instant 200 OK response
         const { error: jobInsertErr } = await supabaseAdmin.from('jobs').insert({
             id: jobId,
             user_id: userId,
@@ -73,20 +33,28 @@ export const uploadAndExtractDirect = async (req, res, next) => {
         });
 
         if (jobInsertErr) {
-            throw new Error(`Failed to create job record: ${jobInsertErr.message}`);
+            logger.error(`[DIRECT] Job insert failed: ${jobInsertErr.message}`);
+            return res.status(500).json({ error: 'Failed to initialize extraction job' });
         }
 
-        // Return immediately with jobId to prevent frontend timeout on cold starts
-        res.status(202).json({ success: true, jobId });
+        // Return immediately so frontend doesn't hang
+        res.status(200).json({
+            success: true,
+            jobId,
+            message: 'Upload complete. Extraction is running in the background.',
+        });
 
         // ─── Background Execution ────────────────────────────────────
         setImmediate(async () => {
+            const fileBuffer = fs.readFileSync(finalPath);
             console.log(`[WORKER START] Triggered for Job: ${jobId}, Buffer Size: ${fileBuffer?.length || 0}`);
             if (!fileBuffer || fileBuffer.length === 0) {
-                console.error(`[WORKER ERROR] PDF buffer is empty for job ${jobId}`);
-                await supabaseAdmin.from('jobs').update({ status: 'failed', error_message: 'Empty PDF buffer' }).eq('id', jobId);
+                console.error(`[WORKER FATAL] Buffer is empty for ${jobId}`);
+                await supabaseAdmin.from('jobs').update({ status: 'failed', error_message: 'File buffer is empty' }).eq('id', jobId).catch(()=>{});
                 return;
             }
+
+            const startTime = Date.now();
 
             try {
                 console.log(`[WORKER] Loading PDF with pdf-lib to count pages...`);
@@ -104,6 +72,11 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                 let completedPages = 0;
                 let accumulatedQuestions = [];
                 let pdfUrl = null;
+
+                const storagePath = `pdfs/${uploadId}.pdf`;
+                const storageUploadPromise = supabaseAdmin.storage
+                    .from('uploads')
+                    .upload(storagePath, fileBuffer, { contentType: 'application/pdf', upsert: true });
 
                 // Fire and forget storage upload and generate URL early
                 storageUploadPromise.then(async () => {
@@ -123,80 +96,89 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                 for (let i = 0; i < totalPages; i += concurrency) {
                     const chunk = Array.from({ length: Math.min(concurrency, totalPages - i) }, (_, idx) => i + idx + 1);
                     
-                    const pageTasks = chunk.map(pageNum => {
-                        return (async () => {
-                            console.log(`[WORKER] ---> Slicing Page ${pageNum}/${totalPages}`);
+                    const pageTasks = [];
+                    
+                    for (const pageNum of chunk) {
+                        console.log(`[WORKER] ---> Slicing Page ${pageNum}/${totalPages}`);
                         try {
+                            // Slice sequentially to prevent pdf-lib concurrent mutation deadlocks
                             const pageB64 = await splitPdfDocIntoChunk(loadedPdfDoc, pageNum, pageNum);
                             const pageBuffer = Buffer.from(pageB64, 'base64');
                             
-                            console.log(`[WORKER] Sending Page ${pageNum} to Gemini (${pageBuffer.length} bytes)...`);
-                            // 1. Extract from Gemini (Sequential zero-loss retry happens inside here)
-                            const questions = await extractQuestionsFromSinglePage(pageBuffer);
-                            console.log(`[WORKER] Page ${pageNum} extracted: ${questions.length} questions`);
-                            
-                            // 2. Process Diagram Cropping (Non-blocking array)
-                            const cropPromises = questions.map(async (q) => {
-                                if (q.hasDiagram && q.diagramBox) {
-                                    try {
-                                        const { cropPdfRegionToImage } = await import('../services/crop.service.js');
-                                        const croppedImageBuffer = await cropPdfRegionToImage(pageBuffer, q.diagramBox);
-                                        const fileName = `diagrams/${jobId}_p${pageNum}_q${q.qNum}_${Date.now()}.png`;
-                                        
-                                        const { error: uploadError } = await supabaseAdmin.storage
-                                            .from('uploads')
-                                            .upload(fileName, croppedImageBuffer, { contentType: 'image/png', upsert: true });
+                            // Push Gemini extraction to run concurrently
+                            pageTasks.push((async () => {
+                                console.log(`[WORKER] Sending Page ${pageNum} to Gemini (${pageBuffer.length} bytes)...`);
+                                try {
+                                    // 1. Extract from Gemini (Sequential zero-loss retry happens inside here)
+                                    const questions = await extractQuestionsFromSinglePage(pageBuffer);
+                                    console.log(`[WORKER] Page ${pageNum} extracted: ${questions.length} questions`);
+                                    
+                                    // 2. Process Diagram Cropping (Non-blocking array)
+                                    const cropPromises = questions.map(async (q) => {
+                                        if (q.hasDiagram && q.diagramBox) {
+                                            try {
+                                                const { cropPdfRegionToImage } = await import('../services/crop.service.js');
+                                                const croppedImageBuffer = await cropPdfRegionToImage(pageBuffer, q.diagramBox);
+                                                const fileName = `diagrams/${jobId}_p${pageNum}_q${q.qNum}_${Date.now()}.png`;
+                                                
+                                                const { error: uploadError } = await supabaseAdmin.storage
+                                                    .from('uploads')
+                                                    .upload(fileName, croppedImageBuffer, { contentType: 'image/png', upsert: true });
 
-                                        if (!uploadError) {
-                                            const { data: publicUrlData } = supabaseAdmin.storage
-                                                .from('uploads')
-                                                .getPublicUrl(fileName);
-                                            q.diagramUrl = publicUrlData.publicUrl;
+                                                if (!uploadError) {
+                                                    const { data: publicUrlData } = supabaseAdmin.storage
+                                                        .from('uploads')
+                                                        .getPublicUrl(fileName);
+                                                    q.diagramUrl = publicUrlData.publicUrl;
+                                                }
+                                            } catch (cropErr) {
+                                                logger.warn(`Failed to crop diagram for p${pageNum} q${q.qNum}: ${cropErr.message}`);
+                                            }
                                         }
-                                    } catch (cropErr) {
-                                        logger.warn(`Failed to crop diagram for p${pageNum} q${q.qNum}: ${cropErr.message}`);
-                                    }
-                                }
-                            });
-                            
-                            await Promise.all(cropPromises);
+                                    });
+                                    
+                                    await Promise.all(cropPromises);
 
-                            // 3. Incrementally Persist
-                            for (const q of questions) {
-                                await supabaseAdmin.from('questions').insert({
-                                    id: q.id,
-                                    job_id: jobId,
-                                    q_num: q.qNum,
-                                    subject: q.subject,
-                                    chapter: q.chapter,
-                                    difficulty: q.difficulty,
-                                    question_text: q.question,
-                                    options: q.options,
-                                    correct_option: q.correct,
-                                    explanation: q.explanation,
-                                    diagram_url: q.diagramUrl || null
-                                });
-                            }
-                            
-                            accumulatedQuestions.push(...questions);
-                            completedPages++;
-                            
-                            const progress = Math.min(95, Math.round((completedPages / totalPages) * 100));
-                            await supabaseAdmin.from('jobs').update({ progress }).eq('id', jobId);
-                            
-                            if (io) {
-                                io.to(userId).emit('job-progress', { 
-                                    jobId, progress, pagesCompleted: completedPages, totalPages, 
-                                    questionsExtracted: accumulatedQuestions.length,
-                                    status: `Extracted page ${completedPages}/${totalPages}` 
-                                });
-                            }
+                                    // 3. Incrementally Persist
+                                    for (const q of questions) {
+                                        await supabaseAdmin.from('questions').insert({
+                                            id: q.id,
+                                            job_id: jobId,
+                                            q_num: q.qNum,
+                                            subject: q.subject,
+                                            chapter: q.chapter,
+                                            difficulty: q.difficulty,
+                                            question_text: q.question,
+                                            options: q.options,
+                                            correct_option: q.correct,
+                                            explanation: q.explanation,
+                                            diagram_url: q.diagramUrl || null
+                                        });
+                                    }
+                                    
+                                    accumulatedQuestions.push(...questions);
+                                    completedPages++;
+                                    
+                                    const progress = Math.min(95, Math.round((completedPages / totalPages) * 100));
+                                    await supabaseAdmin.from('jobs').update({ progress }).eq('id', jobId);
+                                    
+                                    if (io) {
+                                        io.to(userId).emit('job-progress', { 
+                                            jobId, progress, pagesCompleted: completedPages, totalPages, 
+                                            questionsExtracted: accumulatedQuestions.length,
+                                            status: `Extracted page ${completedPages}/${totalPages}` 
+                                        });
+                                    }
+                                } catch (err) {
+                                    console.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
+                                    throw err; // Re-throw to make the Promise.all fail early if a page totally fails
+                                }
+                            })());
                         } catch (err) {
-                            console.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
-                            throw err; // Re-throw to make the Promise.all fail early if a page totally fails
+                            console.error(`[PAGE SLICE ERROR] Page ${pageNum} failed: ${err.message}`);
+                            throw err; // Fail early if PDF slicing fails
                         }
-                        })();
-                    });
+                    }
 
                     await Promise.all(pageTasks);
                 }
@@ -260,7 +242,7 @@ export const uploadAndExtractDirect = async (req, res, next) => {
     } catch (error) {
         logger.error(`[DIRECT] Upload error: ${error.message}`);
         if (!res.headersSent) {
-            return res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'Failed to process PDF upload.' });
         }
     }
 };
