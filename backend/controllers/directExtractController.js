@@ -112,9 +112,9 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                     pdfUrl = `/api/pdf/${uploadId}`;
                 });
 
-                // Set up concurrency
+                // Set up concurrency - reduce to 1 to prevent Gemini Free Tier 'overloaded' errors
                 const pLimit = (await import('p-limit')).default;
-                const limit = pLimit(2); // Process exactly 2 pages concurrently
+                const limit = pLimit(1); // Process exactly 1 page concurrently
 
                 const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
                     const pageNum = idx + 1;
@@ -186,12 +186,17 @@ export const uploadAndExtractDirect = async (req, res, next) => {
                                 });
                             }
                         } catch (err) {
-                            logger.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
+                            console.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
+                            throw err; // Re-throw to make the Promise.all fail early if a page totally fails
                         }
                     });
                 });
 
                 await Promise.all(pageTasks);
+
+                if (accumulatedQuestions.length === 0) {
+                    throw new Error("Extraction completed but 0 questions were found. The Gemini API might be overloaded or the PDF contains no parseable MCQs.");
+                }
 
                 // Wait for the full PDF storage upload to finish just in case
                 await storageUploadPromise.catch(() => {});

@@ -54,7 +54,7 @@ export const createAiWorker = (io) => {
             let completedPages = 0;
 
             const pLimit = (await import('p-limit')).default;
-            const limit = pLimit(2);
+            const limit = pLimit(1); // Reduced to 1 to avoid API overload
 
             const pageTasks = Array.from({ length: totalPages }, (_, idx) => {
                 const pageNum = idx + 1;
@@ -84,6 +84,7 @@ export const createAiWorker = (io) => {
                         });
                     } catch (err) {
                         console.error(`[PAGE EXTRACT ERROR] Page ${pageNum} failed: ${err.message}`);
+                        throw err; // Fail early if API crashes completely
                     }
                 });
             });
