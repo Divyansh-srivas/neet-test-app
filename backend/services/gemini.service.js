@@ -235,10 +235,10 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
 
     if (!success) {
         logger.error(`[GEMINI NATIVE] Failed after all retries. Last error: ${lastError?.message || lastError}`);
-        return []; // Do not throw, allow other chunks to proceed
+        return { questions: [], failed: true, reason: lastError?.message || String(lastError) }; // Distinguishable failure
     }
 
-    return extractedQuestions;
+    return { questions: extractedQuestions, failed: false };
 };
 
 // Remove extractQuestionsFromPDFBuffer and extractQuestionsFromChunk entirely to prevent their usage

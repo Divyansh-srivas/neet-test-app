@@ -69,7 +69,8 @@ export function JobProvider({ children }) {
             progress: data.progress,
             pagesCompleted: data.pagesCompleted,
             totalPages: data.totalPages,
-            questionsExtracted: data.questionsExtracted
+            questionsExtracted: data.questionsExtracted,
+            failedPages: data.failedPages || prev[data.jobId]?.failedPages
         }));
     });
 
@@ -146,7 +147,8 @@ export function JobProvider({ children }) {
                           progress: newProgress,
                           pagesCompleted: job.pages_completed || 0,
                           totalPages: job.total_pages || 0,
-                          questionsExtracted: job.extracted_questions || 0
+                          questionsExtracted: job.extracted_questions || 0,
+                          failedPages: job.metadata?.failedPages || updated[job.id]?.failedPages
                       };
                   } else if (job.status === 'failed') {
                       if (updated[job.id] && updated[job.id].status !== 'failed') {
@@ -160,7 +162,8 @@ export function JobProvider({ children }) {
                           updated[job.id] = {
                               ...updated[job.id],
                               status: 'completed',
-                              progress: 100
+                              progress: 100,
+                              failedPages: job.metadata?.failedPages || updated[job.id]?.failedPages
                           };
                       }
                   }

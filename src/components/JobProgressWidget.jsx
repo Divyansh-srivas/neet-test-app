@@ -1,6 +1,6 @@
 import React from 'react';
 import { useJob } from '../utils/JobContext';
-import { Loader, CheckCircle, XCircle, FileText, ChevronRight } from 'lucide-react';
+import { Loader, CheckCircle, XCircle, FileText, ChevronRight, AlertTriangle } from 'lucide-react';
 
 export default function JobProgressWidget({ setPage, setPendingStartTestId }) {
     const { activeJobs, clearJob } = useJob();
@@ -69,6 +69,16 @@ export default function JobProgressWidget({ setPage, setPendingStartTestId }) {
                         {isFailed && (
                             <div style={{ fontSize: 13, color: 'var(--red)' }}>
                                 {job.error || 'An unexpected error occurred.'}
+                            </div>
+                        )}
+                        
+                        {(isCompleted && job.failedPages && job.failedPages.length > 0) && (
+                            <div style={{ background: 'color-mix(in srgb, var(--yellow) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--yellow) 40%, transparent)', borderRadius: 8, padding: 10, marginTop: 8, fontSize: 12, color: 'var(--yellow)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                                <div>
+                                    <strong style={{ display: 'block', marginBottom: 2 }}>⚠️ {job.failedPages.length} page(s) failed</strong>
+                                    Extraction may be incomplete. Failed pages: {job.failedPages.join(', ')}.
+                                </div>
                             </div>
                         )}
 
