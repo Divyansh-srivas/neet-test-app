@@ -197,6 +197,7 @@ export default function AnalysisPage({ test, setPage }) {
             const isSkipped = ans === undefined
             const color = isSkipped ? 'var(--muted)' : isCorrect ? 'var(--green)' : 'var(--red)'
             const bkd = bookmarkedIds.has(q.id)
+            console.log('bkd for', q.id, bkd)
 
             return (
               <div key={q.id} style={{ padding: '14px 16px', background: 'var(--surface2)', borderRadius: 12, borderLeft: `3px solid ${color}` }}>
@@ -241,7 +242,7 @@ export default function AnalysisPage({ test, setPage }) {
                       return next;
                     });
                   }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: bkd ? 'var(--yellow)' : 'var(--muted)', flexShrink: 0, padding: 4 }}>
-                    <Bookmark size={16} fill={bkd ? 'var(--yellow)' : 'none'} />
+                    <Bookmark size={16} fill={bkd ? 'currentColor' : 'none'} />
                   </button>
                 </div>
               </div>
