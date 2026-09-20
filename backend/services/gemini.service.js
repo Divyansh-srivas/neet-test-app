@@ -131,11 +131,20 @@ MANDATORY RULES:
 1. Extract ALL questions from this page. Do NOT skip any question.
 2. NORMALIZE OPTIONS: Map all option identifiers to "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
 3. LATEX FORMULAS: Retain LaTeX for mathematical terms, physics formulas, and chemical equations ($...$ or $$...$$).
+   - Wrap ONLY the mathematical expressions in single $...$ pairs.
+   - NEVER let a $...$ pair span across normal English words.
+   - Close the math delimiter immediately after the equation/symbol ends.
+   - Keep plain English words completely outside any $...$ markers, and ALWAYS preserve normal spacing between words and math.
+   - Example: "Force F is given by $F = A\sin(Ct) + B\cos(Dx)$. Then the dimensions of $\frac{A}{B}$ and $\frac{C}{D}$ are given by :-"
 4. DIAGRAMS & FIGURES: Only set 'diagramBox' when the question contains an actual VISUAL element that cannot be represented as text: a photograph, drawn diagram, anatomical figure, graph/chart, chemical structure drawing, or circuit/physics diagram.
    Do NOT set diagramBox for: MCQ option tables, statement/assertion tables (Column I / Column II match tables), or any content that is plain text arranged in a table layout — that content must instead be captured accurately in the 'question' and 'options' text fields. When in doubt, omit diagramBox.
    If valid, return normalized bounding box coordinates in "diagramBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000), and set "hasDiagram": true.
 5. ANSWER KEYS: If answer key or explanation is available, extract them. If missing, set "correctAnswer": "A" and "explanation": null.
-6. SUBJECT DETECTION: Identify subject as "Physics", "Chemistry", or "Biology" based on the content.
+6. SUBJECT DETECTION: Classify the subject strictly based on the question's actual terminology/topic:
+   - "Physics" (mechanics, electromagnetism, optics, units and dimensions, forces, motion, etc.)
+   - "Chemistry" (reactions, compounds, equations with chemical formulas, nomenclature, moles, etc.)
+   - "Biology" (organisms, anatomy, physiology, genetics, taxonomy, etc.)
+   - Do NOT assume the standard NEET Q1-45 (Physics) / Q46-90 (Chemistry) / Q91-180 (Biology) numbering pattern. This is a full syllabus mixed test, so a Physics question can appear at Q120. Prioritize actual CONTENT over question numbers.
 7. CHAPTER DETECTION: Identify the chapter/topic name if visible.
 
 OUTPUT: Return a valid JSON array of question objects. No markdown fences. No extra text.
