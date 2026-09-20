@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Trophy, Target, Clock, TrendingUp, Bookmark, AlertTriangle } from 'lucide-react'
-import { toggleBookmark, isBookmarked } from '../utils/storage'
+import { toggleBookmark, getBookmarks } from '../utils/storage'
 import { getTestRanking, getUserAnalytics } from '../api/performance'
 import { useAuth } from '../utils/useAuth'
 import PdfImageCropper from '../components/PdfImageCropper'
@@ -16,6 +16,7 @@ export default function AnalysisPage({ test, setPage }) {
   const [perfSettings, setPerfSettings] = useState(null)
   const [rankings, setRankings] = useState(null)
   const [weakAreas, setWeakAreas] = useState([])
+  const [bookmarkedIds, setBookmarkedIds] = useState(() => new Set(getBookmarks().map(b => b.id)))
 
   const stats = useMemo(() => {
     if (!test) return null
@@ -195,7 +196,7 @@ export default function AnalysisPage({ test, setPage }) {
             const isCorrect = ans === q.correct
             const isSkipped = ans === undefined
             const color = isSkipped ? 'var(--muted)' : isCorrect ? 'var(--green)' : 'var(--red)'
-            const bkd = isBookmarked(q.id)
+            const bkd = bookmarkedIds.has(q.id)
 
             return (
               <div key={q.id} style={{ padding: '14px 16px', background: 'var(--surface2)', borderRadius: 12, borderLeft: `3px solid ${color}` }}>
@@ -232,7 +233,14 @@ export default function AnalysisPage({ test, setPage }) {
                       </div>
                     )}
                   </div>
-                  <button onClick={() => toggleBookmark(q)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: bkd ? 'var(--yellow)' : 'var(--muted)', flexShrink: 0, padding: 4 }}>
+                  <button onClick={() => {
+                    toggleBookmark(q);
+                    setBookmarkedIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(q.id)) next.delete(q.id); else next.add(q.id);
+                      return next;
+                    });
+                  }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: bkd ? 'var(--yellow)' : 'var(--muted)', flexShrink: 0, padding: 4 }}>
                     <Bookmark size={16} fill={bkd ? 'var(--yellow)' : 'none'} />
                   </button>
                 </div>

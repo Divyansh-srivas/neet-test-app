@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Clock, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
 import MathText from './MathText';
+import { getBookmarks, toggleBookmark as toggleStorageBookmark } from '../utils/storage';
 import './mcq-runner.css';
 
 // Sample data for demo if no questions provided
@@ -42,7 +43,7 @@ export default function InteractiveMcqRunner({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptions, setSelectedOptions] = useState({}); // { questionId: selectedOptionId }
   const [submittedStates, setSubmittedStates] = useState({}); // { questionId: boolean }
-  const [bookmarks, setBookmarks] = useState(new Set());
+  const [bookmarks, setBookmarks] = useState(() => new Set(getBookmarks().map(b => b.id)));
   const [seconds, setSeconds] = useState(0);
 
   const question = questions[currentIndex];
@@ -85,6 +86,7 @@ export default function InteractiveMcqRunner({
   };
 
   const toggleBookmark = () => {
+    toggleStorageBookmark(question);
     const newBookmarks = new Set(bookmarks);
     if (newBookmarks.has(question.id)) {
       newBookmarks.delete(question.id);
