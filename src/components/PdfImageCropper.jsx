@@ -191,7 +191,7 @@ export default function PdfImageCropper({ pdfUrl, pageNum, box }) {
         extractImage();
         
         return () => { isMounted.current = false; };
-    }, [pdfUrl, pageNum, box]);
+    }, [pdfUrl, pageNum, box ? box.join(',') : null]);
 
     if (error) {
         return (

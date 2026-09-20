@@ -49,7 +49,17 @@ export const createAiWorker = (io) => {
                     
                     logger.info(`[gemini] job=${jobId} chunk ${chunkIdx}/${chunkTasks} responded in ${Date.now() - startTime}ms`);
 
-                    allExtractedRaw.push(...questions);
+                    const adjustedQuestions = questions.map(q => {
+                        if (q && q.imageBox && typeof q.imageBox.page === 'number') {
+                            // Gemini thinks it's processing a 1-page PDF, so it returns page: 1.
+                            // We adjust it by adding (startPage - 1) to get the absolute PDF page.
+                            q.imageBox.page = startPage + q.imageBox.page - 1;
+                            logger.info(`[aiWorker] job=${jobId} qNum=${q.questionNumber || q.qNum} mapped diagram to absolute page=${q.imageBox.page} box=[${q.imageBox.box}]`);
+                        }
+                        return q;
+                    });
+
+                    allExtractedRaw.push(...adjustedQuestions);
                     completedPages += (endPage - startPage + 1);
 
                     const progress = Math.max(10, Math.round(((chunkIdx) / chunkTasks) * 70));
