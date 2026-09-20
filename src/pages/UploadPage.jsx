@@ -4,6 +4,7 @@ import { Upload, FileText, AlertCircle, CheckCircle, Loader, XCircle, BarChart3,
 import { useAuth } from '../utils/useAuth'
 import { useJob } from '../utils/JobContext'
 import { createNotification } from '../api/notifications'
+import MathText from '../components/MathText'
 
 export default function UploadPage({ setPage, setActiveTest }) {
   const { profile } = useAuth()
@@ -262,7 +263,7 @@ export default function UploadPage({ setPage, setActiveTest }) {
                 )}
               </div>
               <div style={{ fontSize: 13, color: '#e2e8f0' }}>
-                <strong style={{ color: 'var(--accent)' }}>Q{q.qNum}.</strong> {q.question.slice(0, 100)}...
+                <strong style={{ color: 'var(--accent)' }}>Q{q.qNum}.</strong> <MathText text={q.question.length > 100 ? q.question.slice(0, 100) + '...' : q.question} />
               </div>
             </div>
           ))}

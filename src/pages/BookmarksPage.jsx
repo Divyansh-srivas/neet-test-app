@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { getBookmarks, toggleBookmark } from '../utils/storage'
 import { Bookmark, BookmarkX, Filter } from 'lucide-react'
-import MathRenderer from '../components/MathRenderer'
+import MathText from '../components/MathText'
 
 const SUB_COLORS = { Physics: 'var(--accent)', Chemistry: 'var(--green)', Biology: 'var(--yellow)' }
 
@@ -56,7 +56,7 @@ export default function BookmarksPage() {
                       <span style={{ fontSize: 11, color, background: `${color}20`, padding: '2px 10px', borderRadius: 20, fontWeight: 700 }}>{q.subject}</span>
                       <span style={{ fontSize: 11, color: '#475569' }}>Saved {new Date(q.savedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                     </div>
-                    <p style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.6, marginBottom: 12 }}><MathRenderer content={q.question} /></p>
+                    <p style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.6, marginBottom: 12 }}><MathText text={q.question} /></p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                       {['A', 'B', 'C', 'D'].map(opt => (
                         <div key={opt} style={{
@@ -67,13 +67,13 @@ export default function BookmarksPage() {
                           display: 'flex', gap: 8
                         }}>
                           <span style={{ fontWeight: 700, color: opt === q.correct ? 'var(--green)' : '#475569' }}>{opt}.</span>
-                          <MathRenderer content={q.options?.[opt] || `Option ${opt}`} />
+                          <MathText text={q.options?.[opt] || `Option ${opt}`} />
                         </div>
                       ))}
                     </div>
                     {q.explanation && (
                       <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--surface2)', borderRadius: 8, fontSize: 12, color: '#94a3b8' }}>
-                        💡 <MathRenderer content={q.explanation} />
+                        💡 <MathText text={q.explanation} />
                       </div>
                     )}
                   </div>

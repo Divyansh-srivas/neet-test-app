@@ -7,7 +7,7 @@ import { useAuth } from '../utils/useAuth'
 import { createNotification } from '../api/notifications'
 import { startTestAttempt, saveAttemptState, submitAttempt, recordViolation } from '../api/exam'
 import PdfImageCropper from '../components/PdfImageCropper'
-import MathRenderer from '../components/MathRenderer'
+import MathText from '../components/MathText'
 
 
 const TOTAL_SECONDS = 3 * 60 * 60
@@ -571,7 +571,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
 
             {/* Question Text */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, marginBottom: 24, lineHeight: 1.7, fontSize: questionFontSize }}>
-              <MathRenderer content={q.question} />
+              <MathText text={q.question} />
               {q.imageUrl ? (
                 <div style={{ marginTop: 20, textAlign: 'center', position: 'relative', display: 'inline-block' }}>
                   <img 
@@ -608,7 +608,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
                     transition: 'all 0.15s', display: 'flex', alignItems: 'flex-start', gap: 14
                   }}>
                     <span style={{ width: 28, height: 28, borderRadius: 8, background: selected ? 'var(--accent)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: selected ? 'white' : '#94a3b8', flexShrink: 0 }}>{opt}</span>
-                    <span style={{ flex: 1, marginTop: 3 }}><MathRenderer content={q.options?.[opt] || `Option ${opt}`} /></span>
+                    <span style={{ flex: 1, marginTop: 3 }}><MathText text={q.options?.[opt] || `Option ${opt}`} /></span>
                   </button>
                 )
               })}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Clock, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
-import MathRenderer from './MathRenderer';
+import MathText from './MathText';
 import './mcq-runner.css';
 
 // Sample data for demo if no questions provided
@@ -131,7 +131,7 @@ export default function InteractiveMcqRunner({
             <div className="mcq-year-badge">{question.year}</div>
           )}
           
-          <h2 className="mcq-question-text"><MathRenderer content={question.questionText || question.question} /></h2>
+          <h2 className="mcq-question-text"><MathText text={question.questionText || question.question} /></h2>
           
           <div className="mcq-options-list">
             {question.options.map((opt) => {
@@ -154,7 +154,7 @@ export default function InteractiveMcqRunner({
                   disabled={isSubmitted}
                 >
                   <div className="mcq-option-letter">{opt.id}</div>
-                  <div className="mcq-option-text"><MathRenderer content={opt.text} /></div>
+                  <div className="mcq-option-text"><MathText text={opt.text} /></div>
                   {isSubmitted && isCorrectAnswer && <CheckCircle2 size={18} className="mcq-status-icon correct" />}
                   {isSubmitted && isSelected && !isCorrectAnswer && <XCircle size={18} className="mcq-status-icon wrong" />}
                 </button>
@@ -166,7 +166,7 @@ export default function InteractiveMcqRunner({
           {isSubmitted && (
             <div className="mcq-explanation-box">
               <h3>Explanation</h3>
-              <p><MathRenderer content={question.explanation} /></p>
+              <p><MathText text={question.explanation} /></p>
             </div>
           )}
         </div>

@@ -5,7 +5,7 @@ import { toggleBookmark, isBookmarked } from '../utils/storage'
 import { getTestRanking, getUserAnalytics } from '../api/performance'
 import { useAuth } from '../utils/useAuth'
 import PdfImageCropper from '../components/PdfImageCropper'
-import MathRenderer from '../components/MathRenderer'
+import MathText from '../components/MathText'
 
 const card = (style = {}) => ({ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, ...style })
 const PIE_COLORS = ['var(--green)', 'var(--red)', 'var(--border)']
@@ -208,7 +208,7 @@ export default function AnalysisPage({ test, setPage }) {
                         {isSkipped ? 'Skipped' : isCorrect ? '+4' : '-1'}
                       </span>
                     </div>
-                    <p style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.5 }}><MathRenderer content={q.question} /></p>
+                    <p style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.5 }}><MathText text={q.question} /></p>
                     {q.imageUrl ? (
                       <div style={{ marginTop: 8 }}>
                         <img src={q.imageUrl} alt="Diagram" style={{ maxHeight: 120, borderRadius: 4, border: '1px solid var(--border)' }} />
@@ -228,7 +228,7 @@ export default function AnalysisPage({ test, setPage }) {
                     </div>
                     {q.explanation && !isSkipped && !isCorrect && (
                       <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--bg)', borderRadius: 8, fontSize: 12, color: '#94a3b8' }}>
-                        💡 <MathRenderer content={q.explanation} />
+                        💡 <MathText text={q.explanation} />
                       </div>
                     )}
                   </div>
