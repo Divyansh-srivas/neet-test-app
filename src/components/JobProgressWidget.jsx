@@ -2,7 +2,7 @@ import React from 'react';
 import { useJob } from '../utils/JobContext';
 import { Loader, CheckCircle, XCircle, FileText, ChevronRight } from 'lucide-react';
 
-export default function JobProgressWidget({ setPage }) {
+export default function JobProgressWidget({ setPage, setPendingStartTestId }) {
     const { activeJobs, clearJob } = useJob();
     
     const jobs = Object.entries(activeJobs);
@@ -75,6 +75,9 @@ export default function JobProgressWidget({ setPage }) {
                         {isCompleted && (
                             <button 
                                 onClick={() => {
+                                    if (job.testId && setPendingStartTestId) {
+                                        setPendingStartTestId(job.testId);
+                                    }
                                     clearJob(jobId);
                                     if (setPage) setPage('dashboard');
                                 }}

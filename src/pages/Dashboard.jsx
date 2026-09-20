@@ -5,7 +5,7 @@ import { useAuth } from '../utils/useAuth.jsx'
 import { Upload, Play, FileText, Clock, CheckCircle, Trash2, Target } from 'lucide-react'
 import { getUserAnalytics } from '../api/performance'
 
-export default function Dashboard({ setPage, setActiveTest }) {
+export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, setPendingStartTestId }) {
   const { profile: authProfile } = useAuth()
   const [tests, setTests] = useState([])
   const [startingTest, setStartingTest] = useState(null)
@@ -30,6 +30,16 @@ export default function Dashboard({ setPage, setActiveTest }) {
       getUserAnalytics(authProfile.id).then(setUserAnalytics).catch(console.error)
     }
   }, [authProfile?.id])
+
+  useEffect(() => {
+    if (pendingStartTestId && tests.length > 0) {
+      const match = tests.find(t => t.id === pendingStartTestId)
+      if (match) {
+        initiateStart(match)
+        if (setPendingStartTestId) setPendingStartTestId(null)
+      }
+    }
+  }, [pendingStartTestId, tests, setPendingStartTestId])
 
   const handleDeleteTest = (id) => {
     if (window.confirm('Are you sure you want to delete this test?')) {

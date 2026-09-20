@@ -74,9 +74,10 @@ export function JobProvider({ children }) {
     });
 
     newSocket.on('job-completed', (data) => {
+        const generatedTestId = data.testId || `test_${Date.now()}`;
         if (data.questions) {
             saveTest({
-                id: data.testId || `test_${Date.now()}`,
+                id: generatedTestId,
                 name: data.testName || 'AI Extracted Test',
                 questions: data.questions,
                 duration: data.duration || 3 * 3600,
@@ -89,7 +90,7 @@ export function JobProvider({ children }) {
             }, 500);
         }
 
-        setActiveJobs(prev => mergeJob(prev, data.jobId, { status: 'completed', progress: 100 }));
+        setActiveJobs(prev => mergeJob(prev, data.jobId, { status: 'completed', progress: 100, testId: generatedTestId }));
     });
 
     newSocket.on('job-failed', (data) => {

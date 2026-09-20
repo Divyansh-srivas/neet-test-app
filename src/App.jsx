@@ -30,6 +30,7 @@ function AppContent() {
   const [emailLinkError, setEmailLinkError] = useState('')
   const [forcePasswordScreen, setForcePasswordScreen] = useState(false)
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
+  const [pendingStartTestId, setPendingStartTestId] = useState(null)
 
   // Auto-complete sign-in when user clicks the Firebase email link
   useEffect(() => {
@@ -156,7 +157,7 @@ function AppContent() {
           </div>
         )}
 
-        {page === 'dashboard' && <Dashboard setPage={setPage} setActiveTest={setActiveTest} />}
+        {page === 'dashboard' && <Dashboard setPage={setPage} setActiveTest={setActiveTest} pendingStartTestId={pendingStartTestId} setPendingStartTestId={setPendingStartTestId} />}
         {page === 'upload' && <UploadPage setPage={setPage} setActiveTest={setActiveTest} />}
         {page === 'pretest' && activeTest && <PreTestPage test={activeTest} setPage={setPage} />}
         {page === 'exam' && activeTest && <ExamPage test={activeTest} setPage={setPage} setActiveTest={setActiveTest} />}
@@ -166,7 +167,7 @@ function AppContent() {
         {page === 'profile' && <ProfilePage />}
         {page === 'settings' && <SettingsPage />}
 
-        <JobProgressWidget />
+        <JobProgressWidget setPage={setPage} setPendingStartTestId={setPendingStartTestId} />
       </main>
 
       <style>{`
