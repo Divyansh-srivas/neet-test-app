@@ -13,11 +13,9 @@ export const getRedisConnection = () => {
                 enableReadyCheck: false,
                 lazyConnect: true,
                 retryStrategy(times) {
-                    if (times > 3) {
-                        logger.warn('⚠️ Redis connection retry limit reached. Background queues disabled.');
-                        return null;
-                    }
-                    return Math.min(times * 500, 2000);
+                    // BullMQ workers MUST stay connected forever.
+                    // If this returns null, the connection dies permanently.
+                    return Math.min(times * 1000, 5000);
                 },
                 ...(isTls ? { tls: { rejectUnauthorized: false } } : {}) 
             });
@@ -38,11 +36,9 @@ export const getRedisConnection = () => {
             enableReadyCheck: false,
             lazyConnect: true,
             retryStrategy(times) {
-                if (times > 3) {
-                    logger.warn('⚠️ Redis connection retry limit reached. Background queues disabled.');
-                    return null;
-                }
-                return Math.min(times * 500, 2000);
+                // BullMQ workers MUST stay connected forever.
+                // If this returns null, the connection dies permanently.
+                return Math.min(times * 1000, 5000);
             }
         });
         client.on('error', (err) => {
