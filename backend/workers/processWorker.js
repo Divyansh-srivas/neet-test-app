@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export const createProcessWorker = (io) => {
-    return new Worker('question-processing', async job => {
+    return new Worker('question-processing-local', async job => {
         const { jobId, userId, token, storagePath, questions, testName, duration } = job.data;
         const supabase = supabaseAdmin;
         

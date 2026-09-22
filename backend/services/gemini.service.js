@@ -87,10 +87,25 @@ export function normalizeQuestions(rawQuestions) {
         const hasDiagram = !!(q.hasDiagram || q.diagramBox || q.imageBox || q.diagramUrl);
 
         let imageBox = q.imageBox || null;
-        if (!imageBox && q.diagramBox && q.diagramBox.ymin !== undefined) {
+        if (typeof imageBox === 'string') {
+            const parts = imageBox.split(',').map(s => parseFloat(s.trim()));
+            if (parts.length === 4 && parts.every(n => !isNaN(n))) {
+                imageBox = {
+                    page: 1,
+                    box: parts
+                };
+            } else {
+                imageBox = null;
+            }
+        } else if (!imageBox && q.diagramBox && q.diagramBox.ymin !== undefined) {
             imageBox = {
                 page: 1,
                 box: [q.diagramBox.ymin, q.diagramBox.xmin, q.diagramBox.ymax, q.diagramBox.xmax]
+            };
+        } else if (imageBox && typeof imageBox === 'object' && imageBox.ymin !== undefined) {
+            imageBox = {
+                page: 1,
+                box: [imageBox.ymin, imageBox.xmin, imageBox.ymax, imageBox.xmax]
             };
         }
 
@@ -104,7 +119,7 @@ export function normalizeQuestions(rawQuestions) {
             correctAnswer: correctAnswer,
             correct: correctAnswer,
             hasDiagram: hasDiagram,
-            diagramBox: q.diagramBox || null,
+            diagramBox: q.diagramBox || imageBox || null,
             diagramUrl: q.diagramUrl || q.image || null,
             imageBox: imageBox,
             explanation: q.explanation || null,
@@ -130,22 +145,24 @@ Analyze this SINGLE PAGE PDF document and extract EVERY SINGLE multiple choice q
 MANDATORY RULES:
 1. Extract ALL questions from this page. Do NOT skip any question.
 2. NORMALIZE OPTIONS: Map all option identifiers to "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
-3. LATEX FORMULAS: Retain LaTeX for mathematical terms, physics formulas, and chemical equations ($...$ or $$...$$).
-   - Wrap ONLY the mathematical expressions in single $...$ pairs.
-   - NEVER let a $...$ pair span across normal English words.
-   - Close the math delimiter immediately after the equation/symbol ends.
-   - Keep plain English words completely outside any $...$ markers, and ALWAYS preserve normal spacing between words and math.
-   - Example: "Force F is given by $F = A\sin(Ct) + B\cos(Dx)$. Then the dimensions of $\frac{A}{B}$ and $\frac{C}{D}$ are given by :-"
-4. DIAGRAMS & FIGURES: Only set 'diagramBox' when the question contains an actual VISUAL element that cannot be represented as text: a photograph, drawn diagram, anatomical figure, graph/chart, chemical structure drawing, or circuit/physics diagram.
-   Do NOT set diagramBox for: MCQ option tables, statement/assertion tables (Column I / Column II match tables), or any content that is plain text arranged in a table layout — that content must instead be captured accurately in the 'question' and 'options' text fields. When in doubt, omit diagramBox.
-   If valid, return normalized bounding box coordinates in "diagramBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000), and set "hasDiagram": true.
-5. ANSWER KEYS: If answer key or explanation is available, extract them. If missing, set "correctAnswer": "A" and "explanation": null.
-6. SUBJECT DETECTION: Classify the subject strictly based on the question's actual terminology/topic:
-   - "Physics" (mechanics, electromagnetism, optics, units and dimensions, forces, motion, etc.)
-   - "Chemistry" (reactions, compounds, equations with chemical formulas, nomenclature, moles, etc.)
-   - "Biology" (organisms, anatomy, physiology, genetics, taxonomy, etc.)
-   - Do NOT assume the standard NEET Q1-45 (Physics) / Q46-90 (Chemistry) / Q91-180 (Biology) numbering pattern. This is a full syllabus mixed test, so a Physics question can appear at Q120. Prioritize actual CONTENT over question numbers.
-7. CHAPTER DETECTION: Identify the chapter/topic name if visible.
+3. LATEX FORMULAS — each mathematical expression must have its OWN separate $...$ pair. NEVER let English words appear inside $...$.
+   - CORRECT: "the dimensions of $\\frac{A}{B}$ and $\\frac{C}{D}$ are"  (two separate pairs, space between them)
+   - WRONG:   "the dimensions of$\\frac{A}{B}and\\frac{C}{D}$are"         (words fused inside one $...$ — FORBIDDEN)
+   - Keep plain English words completely outside any $...$ markers with normal spaces on both sides.
+   - In JSON output, each backslash inside a $...$ string must be doubled: write "\\\\frac" to produce \\frac in the output.
+4. ASSERTION-REASON QUESTIONS: If a question has an Assertion and a Reason, format questionText as EXACTLY TWO lines with a literal newline (\n) between them:
+   "Assertion: <assertion text>\nReason: <reason text>"
+   - Always prefix with exactly "Assertion:" and "Reason:" (colon, no dash).
+   - The newline (\n) between them is MANDATORY — never put them on the same line.
+5. MATCH THE FOLLOWING / COLUMN-MATCHING QUESTIONS: Format as numbered plain-text lines. NEVER use pipe characters (|) or markdown table syntax (:---) for ANY reason.
+   - CORRECT: "Match the following:\n1. Mitochondria - Powerhouse\n2. Ribosome - Protein synthesis"
+   - WRONG:   "Column I | Column II\n:---|:---\nMitochondria | Powerhouse"   (pipe/markdown FORBIDDEN)
+6. DIAGRAMS & FIGURES: Only set 'imageBox' when the question contains an actual VISUAL element: photograph, drawn diagram, anatomical figure, graph/chart, chemical structure, or circuit diagram.
+   Do NOT set imageBox for text-only tables, assertion tables, or column-matching text. If valid, use "imageBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000) and "hasDiagram": true.
+7. JSON ESCAPING: Correctly escape all backslashes. To output $\\frac{1}{2}$ write "$\\\\frac{1}{2}$" in the JSON string. Do NOT output raw control characters.
+8. ANSWER KEYS: Extract if available; else set "correctAnswer": "A" and "explanation": null.
+9. SUBJECT DETECTION: Classify based on content — "Physics", "Chemistry", or "Biology". Ignore question numbering order.
+10. CHAPTER DETECTION: Identify the chapter/topic name if visible.
 
 OUTPUT: Return a valid JSON array of question objects. No markdown fences. No extra text.
 
@@ -156,7 +173,7 @@ OUTPUT: Return a valid JSON array of question objects. No markdown fences. No ex
     "chapter": "Kinematics",
     "questionText": "Full question text including all sub-parts",
     "hasDiagram": false,
-    "diagramBox": null,
+    "imageBox": null,
     "options": {
       "A": "Option A text",
       "B": "Option B text",
@@ -175,6 +192,41 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
     let retries = 4;
     let lastError = null;
     let extractedQuestions = [];
+    
+    // Config values
+    const promptVersion = 'v3'; // Bumped for schema change
+    const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    const responseSchema = {
+        type: "array",
+        items: {
+            type: "object",
+            properties: {
+                questionNumber: { type: "number" },
+                subject: { type: "string" },
+                chapter: { type: "string" },
+                questionText: { type: "string" },
+                hasDiagram: { type: "boolean" },
+                imageBox: {
+                    type: "string",
+                    nullable: true,
+                    description: "If there is a diagram, output exactly 4 numbers separated by commas: 'ymin,xmin,ymax,xmax'. E.g. '0.2,0.1,0.4,0.9'. Values must be between 0 and 1. Leave null if no diagram."
+                },
+                options: {
+                    type: "object",
+                    properties: {
+                        A: { type: "string" },
+                        B: { type: "string" },
+                        C: { type: "string" },
+                        D: { type: "string" }
+                    }
+                },
+                correctAnswer: { type: "string" },
+                explanation: { type: "string", nullable: true },
+                difficulty: { type: "string" }
+            },
+            required: ["questionNumber", "subject", "chapter", "questionText", "hasDiagram", "options", "correctAnswer", "difficulty"]
+        }
+    };
 
     while (retries > 0 && !success) {
         let abortController = new AbortController();
@@ -182,23 +234,40 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
         
         try {
             const attempt = 5 - retries;
-            const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+            
+            // Global Rate Limiter: Max 12 requests per minute (Gemini free tier allows 15 RPM, leaving buffer)
+            try {
+                const { getRedisConnection } = await import('../queue/index.js');
+                const redis = getRedisConnection();
+                if (redis) {
+                    const minuteKey = `ratelimit:gemini:${Math.floor(Date.now() / 60000)}`;
+                    const reqCount = await redis.incr(minuteKey);
+                    if (reqCount === 1) await redis.expire(minuteKey, 120);
+                    if (reqCount > 12) {
+                        logger.warn(`[GEMINI NATIVE] Rate limit reached (${reqCount}/12). Waiting 10s...`);
+                        await delay(10000); // Wait 10 seconds and try again (will fail this attempt, or just loop)
+                        // Actually, just wait here without throwing, then proceed
+                        // Wait, it's safer to just throw and let the retry loop handle it
+                        throw new Error("429 Too Many Requests: Global Rate Limit Exceeded");
+                    }
+                }
+            } catch (rlErr) {
+                if (rlErr.message.includes("Rate Limit Exceeded")) throw rlErr;
+                logger.warn(`[GEMINI NATIVE] Rate limiter check failed, ignoring: ${rlErr.message}`);
+            }
+
             logger.info(`[GEMINI NATIVE] Attempt ${attempt}/4 — Calling ${modelName} with PDF inline data...`);
             
             const response = await ai.models.generateContent({
                 model: modelName,
                 contents: [
-                    {
-                        inlineData: {
-                            data: base64Pdf,
-                            mimeType: 'application/pdf'
-                        }
-                    },
+                    { inlineData: { data: base64Pdf, mimeType: 'application/pdf' } },
                     prompt
                 ],
                 config: {
                     responseMimeType: 'application/json',
-                    maxOutputTokens: 8192
+                    responseSchema: responseSchema,
+                    maxOutputTokens: 16384
                 }
             }, { signal: abortController.signal });
             
@@ -210,10 +279,84 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                 await delay(2000);
                 continue;
             }
+            
+            console.log("\n[RAW USAGE METADATA]:", JSON.stringify(response.usageMetadata, null, 2));
+            console.log("\n[RAW STRING START]:", response.text.slice(0, 500));
+            console.log("\n[RAW STRING END]:", response.text.slice(-500));
+            
+            // Usage Logging (A1)
+            try {
+                const usage = response.usageMetadata || {};
+                const { createClient } = await import('@supabase/supabase-js');
+                const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+                await sb.from('gemini_usage').insert({
+                    model: modelName,
+                    prompt_tokens: usage.promptTokenCount || 0,
+                    candidates_tokens: usage.candidatesTokenCount || 0,
+                    thoughts_tokens: usage.thoughtsTokenCount || 0,
+                    total_tokens: usage.totalTokenCount || 0
+                });
+                
+                // Track daily spend in Redis
+                const { getRedisConnection } = await import('../queue/index.js');
+                const redis = getRedisConnection();
+                const today = new Date().toISOString().split('T')[0];
+                
+                // Approximate cost calculation (gemini-3.6-flash: $0.075/1M in, $0.30/1M out -> INR conversion ~84)
+                // Let's use standard $0.75 / $3.75 for now as worst case
+                const inCost = (usage.promptTokenCount || 0) * (0.75 / 1000000);
+                const outCost = ((usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0)) * (3.75 / 1000000);
+                const totalInr = (inCost + outCost) * 84;
+                
+                await redis.incrbyfloat(`daily_spend_inr:${today}`, totalInr);
+                await redis.expire(`daily_spend_inr:${today}`, 3600 * 24 * 7); // keep for 7 days
+                
+            } catch (e) {
+                logger.error('[GEMINI NATIVE] Usage logging failed:', e.message);
+            }
 
             const rawText = response.text.trim();
             const parsedRaw = robustParseQuestions(rawText);
-            const normalized = normalizeQuestions(parsedRaw);
+            
+            // Post-parse safety net (Item 4)
+            // Scan every string field in parsed questions for control characters
+            let unrepairableFound = false;
+            
+            const scanAndRepairString = (str) => {
+                if (typeof str !== 'string') return str;
+                if (!/[\x00-\x1f]/.test(str)) return str;
+                
+                // We found a raw control character inside a string value (which means the JSON parser allowed it, or the SDK schema bypassed it)
+                // Repair unambiguous cases: Form Feed -> \f (often \frac), Backspace -> \b (often \beta), Tab -> \t, CR -> \r, LF -> \n
+                let repaired = str.replace(/\x0c/g, '\\f')
+                                  .replace(/\x08/g, '\\b')
+                                  .replace(/\x0b/g, '\\v');
+                
+                if (/[\x00-\x07\x0b\x0e-\x1f]/.test(repaired)) {
+                    unrepairableFound = true;
+                }
+                return repaired;
+            };
+
+            const repairObject = (obj) => {
+                if (Array.isArray(obj)) return obj.map(repairObject);
+                if (obj !== null && typeof obj === 'object') {
+                    for (const key in obj) {
+                        obj[key] = repairObject(obj[key]);
+                    }
+                    return obj;
+                }
+                return scanAndRepairString(obj);
+            };
+
+            const safeParsedRaw = repairObject(parsedRaw);
+            
+            if (unrepairableFound) {
+                logger.warn(`[GEMINI NATIVE] Control characters found in raw text! Escaping unambiguous ones.`);
+                throw new Error("UNREPAIRABLE_CONTROL_CHARACTERS_FOUND");
+            }
+
+            const normalized = normalizeQuestions(safeParsedRaw);
             
             logger.info(`[GEMINI NATIVE] Parsed ${normalized.length} questions from page`);
             extractedQuestions = normalized;
@@ -225,9 +368,14 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
             const errStr = (error.message || error).toString();
             logger.warn(`[GEMINI NATIVE] Attempt ${5 - retries} failed: ${errStr}`);
             
-            const isFatal = errStr.includes('quota') || errStr.includes('billing') || errStr.includes('depleted');
+            if (errStr.includes("UNREPAIRABLE_CONTROL_CHARACTERS_FOUND")) {
+                logger.error(`[GEMINI NATIVE] Unrepairable control characters. Cannot cache or use this chunk.`);
+                // Do not mark as fatal quota, just retry
+            }
+
+            const isFatal = errStr.includes('quota') || errStr.includes('billing') || errStr.includes('depleted') || errStr.includes('402') || errStr.includes('403') || errStr.includes('PERMISSION_DENIED');
             if (isFatal) {
-                logger.error(`[GEMINI NATIVE] Fatal quota error, aborting retries.`);
+                logger.error(`[GEMINI NATIVE] Fatal API error (402/403), aborting retries.`);
                 retries = 0;
                 break;
             }
@@ -235,7 +383,12 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
             retries--;
             if (retries > 0) {
                 const attempt = 5 - retries;
-                const delayMs = Math.min(5000 * Math.pow(2, attempt - 1), 40000);
+                // Parse Retry-After from 429 if available, else exponential backoff
+                let delayMs = Math.min(5000 * Math.pow(2, attempt - 1), 40000);
+                const retryMatch = errStr.match(/retry in (\d+(\.\d+)?)s/i);
+                if (retryMatch && retryMatch[1]) {
+                    delayMs = Math.max(delayMs, parseFloat(retryMatch[1]) * 1000 + 1000);
+                }
                 logger.warn(`[GEMINI NATIVE] Retrying in ${delayMs/1000}s...`);
                 await delay(delayMs);
             }
@@ -244,10 +397,10 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
 
     if (!success) {
         logger.error(`[GEMINI NATIVE] Failed after all retries. Last error: ${lastError?.message || lastError}`);
-        return { questions: [], failed: true, reason: lastError?.message || String(lastError) }; // Distinguishable failure
+        return { questions: [], failed: true, reason: lastError?.message || String(lastError) };
     }
 
-    return { questions: extractedQuestions, failed: false };
+    return { questions: extractedQuestions, failed: false, promptVersion };
 };
 
 // Remove extractQuestionsFromPDFBuffer and extractQuestionsFromChunk entirely to prevent their usage

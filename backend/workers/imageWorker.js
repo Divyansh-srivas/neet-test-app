@@ -4,7 +4,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 
 export const createImageWorker = (io) => {
-    return new Worker('image-extraction', async job => {
+    return new Worker('image-extraction-local', async job => {
         const { jobId, userId, filePath, storagePath, token, questions, testName, duration } = job.data;
         const supabase = supabaseAdmin;
         

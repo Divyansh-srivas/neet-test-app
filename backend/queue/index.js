@@ -3,11 +3,10 @@ import Redis from 'ioredis';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
-const redisUrl = process.env.REDIS_URL;
-const isTls = redisUrl && redisUrl.startsWith('rediss://');
-
 export const getRedisConnection = () => {
     try {
+        const redisUrl = config.REDIS_URL || process.env.REDIS_URL;
+        const isTls = redisUrl && redisUrl.startsWith('rediss://');
         if (redisUrl) {
             const client = new Redis(redisUrl, { 
                 maxRetriesPerRequest: null, 
@@ -75,11 +74,11 @@ const createQueueSafe = (name) => {
 };
 
 export const queues = {
-    pdfUpload: createQueueSafe('pdf-upload'),
-    aiExtraction: createQueueSafe('ai-extraction'),
-    imageExtraction: createQueueSafe('image-extraction'),
-    questionProcessing: createQueueSafe('question-processing'),
-    resultSaving: createQueueSafe('result-saving')
+    pdfUpload: createQueueSafe('pdf-upload-local'),
+    aiExtraction: createQueueSafe('ai-extraction-local'),
+    imageExtraction: createQueueSafe('image-extraction-local'),
+    questionProcessing: createQueueSafe('question-processing-local'),
+    resultSaving: createQueueSafe('result-saving-local')
 };
 
 logger.info('✅ BullMQ Queues initialized safely');

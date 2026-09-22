@@ -5,13 +5,24 @@ import { logger } from '../utils/logger.js';
 import { config } from '../config/env.js';
 
 export const createSaveWorker = (io) => {
-    return new Worker('result-saving', async job => {
-        const { jobId, userId, token, storagePath, questions, testName, duration } = job.data;
+    return new Worker('result-saving-local', async job => {
+        const { jobId, userId, token, storagePath, testName, duration, dedupeSourceTestId } = job.data;
+        let { questions } = job.data;
         const supabase = supabaseAdmin;
         
         try {
             await supabase.from('jobs').update({ status: 'processing', progress: 95 }).eq('id', jobId);
             io.to(userId).emit('job-progress', { jobId, progress: 95 });
+            
+            if (dedupeSourceTestId && (!questions || questions.length === 0)) {
+                logger.info(`[DEDUPE] Fetching source questions from test ${dedupeSourceTestId} for job ${jobId}`);
+                const { data: sourceTest, error: err } = await supabase.from('tests').select('questions').eq('id', dedupeSourceTestId).single();
+                if (err || !sourceTest || !sourceTest.questions) {
+                    throw new Error(`Dedupe source test ${dedupeSourceTestId} not found or has no questions.`);
+                }
+                const { v4: uuidv4 } = await import('uuid');
+                questions = sourceTest.questions.map(q => ({ ...q, id: uuidv4() }));
+            }
             
             let extractedImagesCount = 0;
 

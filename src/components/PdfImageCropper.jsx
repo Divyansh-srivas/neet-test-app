@@ -152,19 +152,22 @@ export default function PdfImageCropper({ pdfUrl, pageNum, box }) {
                     viewport: viewport
                 }).promise;
 
-                // Box coordinates from Gemini are normalized [ymin, xmin, ymax, xmax] scaled 0-1000
-                const [ymin, xmin, ymax, xmax] = box;
+                // Box coordinates from Gemini are normalized [ymin, xmin, ymax, xmax] scaled 0-1000 or 0-1
+                let [ymin, xmin, ymax, xmax] = box;
+                const isScale1 = ymax <= 1 && xmax <= 1;
+                const scaleDivisor = isScale1 ? 1 : 1000;
                 
-                const cropY = Math.max(0, (ymin / 1000) * canvas.height);
-                const cropX = Math.max(0, (xmin / 1000) * canvas.width);
-                const cropH = Math.min(canvas.height - cropY, ((ymax - ymin) / 1000) * canvas.height);
-                const cropW = Math.min(canvas.width - cropX, ((xmax - xmin) / 1000) * canvas.width);
+                const cropY = Math.max(0, (ymin / scaleDivisor) * canvas.height);
+                const cropX = Math.max(0, (xmin / scaleDivisor) * canvas.width);
+                const cropH = Math.min(canvas.height - cropY, ((ymax - ymin) / scaleDivisor) * canvas.height);
+                const cropW = Math.min(canvas.width - cropX, ((xmax - xmin) / scaleDivisor) * canvas.width);
 
                 if (cropW <= 0 || cropH <= 0) {
                     throw new Error("Zero crop dimensions");
                 }
 
                 const cropCanvas = document.createElement('canvas');
+                console.log(`[PdfImageCropper Debug] original canvas: ${canvas.width}x${canvas.height}, crop coordinates: X=${cropX}, Y=${cropY}, W=${cropW}, H=${cropH}, ScaleDivisor=${scaleDivisor}`);
                 cropCanvas.width = cropW;
                 cropCanvas.height = cropH;
                 const cropCtx = cropCanvas.getContext('2d');
