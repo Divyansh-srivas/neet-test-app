@@ -78,9 +78,10 @@ export function AuthProvider({ children }) {
         const data = await res.json()
         setProfile(data)
         if (data.accessibility_settings && Object.keys(data.accessibility_settings).length > 0) {
+          const uid = firebaseUser.uid
           import('./storage').then(({ getSettings, saveSettings }) => {
-            const local = getSettings()
-            saveSettings({ ...local, ...data.accessibility_settings })
+            const local = getSettings(uid)
+            saveSettings(uid, { ...local, ...data.accessibility_settings })
           })
         }
       }

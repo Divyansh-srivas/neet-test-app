@@ -12,11 +12,11 @@ const PIE_COLORS = ['var(--green)', 'var(--red)', 'var(--border)']
 const SUB_COLORS = { physics: 'var(--accent)', chemistry: 'var(--green)', biology: 'var(--yellow)' }
 
 export default function AnalysisPage({ test, setPage }) {
-  const { profile: authProfile } = useAuth()
+  const { profile: authProfile, user } = useAuth()
   const [perfSettings, setPerfSettings] = useState(null)
   const [rankings, setRankings] = useState(null)
   const [weakAreas, setWeakAreas] = useState([])
-  const [bookmarkedIds, setBookmarkedIds] = useState(() => new Set(getBookmarks().map(b => b.id)))
+  const [bookmarkedIds, setBookmarkedIds] = useState(() => new Set(getBookmarks(user?.uid).map(b => b.id)))
 
   const stats = useMemo(() => {
     if (!test) return null
@@ -235,7 +235,7 @@ export default function AnalysisPage({ test, setPage }) {
                     )}
                   </div>
                   <button onClick={() => {
-                    toggleBookmark(q);
+                    toggleBookmark(user?.uid, q);
                     setBookmarkedIds(prev => {
                       const next = new Set(prev);
                       if (next.has(q.id)) next.delete(q.id); else next.add(q.id);

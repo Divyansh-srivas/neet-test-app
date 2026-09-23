@@ -13,7 +13,7 @@ import MathText from '../components/MathText'
 const TOTAL_SECONDS = 3 * 60 * 60
 
 export default function ExamPage({ test, setPage, setActiveTest }) {
-  const { profile } = useAuth()
+  const { profile, user } = useAuth()
   const { settings } = useSettings()
   const totalSeconds = test.duration || TOTAL_SECONDS
   

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getProfile, saveProfile } from '../utils/storage'
+
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts'
 import { User, Edit2, Save, Trophy, Target, TrendingUp, BookOpen, Clock, AlertTriangle, Award } from 'lucide-react'
 import { getUserAnalytics, getRankings } from '../api/performance'

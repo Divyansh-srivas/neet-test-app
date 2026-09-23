@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { getSettings, saveTest } from '../utils/storage'
 import { Upload, FileText, AlertCircle, CheckCircle, Loader, XCircle, BarChart3, Image as ImageIcon, Target } from 'lucide-react'
 import { useAuth } from '../utils/useAuth'
 import { useJob } from '../utils/JobContext'
@@ -68,31 +67,6 @@ export default function UploadPage({ setPage, setActiveTest }) {
 
   const cancelExtraction = () => {
       setStatus(null);
-  }
-
-  const startTest = () => {
-    const test = {
-      id: `test_${Date.now()}`,
-      name: testName,
-      questions,
-      answers: {},
-      startedAt: Date.now(),
-      duration: (parseInt(durationHours) || 0) * 3600 + (parseInt(durationMins) || 0) * 60,
-      completed: false,
-    }
-    saveTest(test)
-
-    if (profile?.id) {
-      createNotification(profile.id, {
-        title: 'New Test Assigned',
-        message: `A new mock test "${testName}" is now available.`,
-        type: 'new_test',
-        actionUrl: null
-      })
-    }
-
-    setActiveTest(newTest)
-    setPage('pretest')
   }
 
   return (

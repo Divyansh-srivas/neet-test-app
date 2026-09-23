@@ -1,5 +1,7 @@
-// Storage keys
-const KEYS = {
+// User-scoped storage keys — every key is namespaced by the authenticated user's UID
+// to prevent data leaking between different accounts on the same browser.
+
+const BASE_KEYS = {
   PROFILE: 'ntp_profile',
   TESTS: 'ntp_tests',
   BOOKMARKS: 'ntp_bookmarks',
@@ -7,53 +9,107 @@ const KEYS = {
   CURRENT_TEST: 'ntp_current_test',
 }
 
+// Returns a user-scoped key. If no uid, returns null (caller should bail).
+const scopedKey = (base, uid) => uid ? `${base}_${uid}` : null
+
 export const storage = {
   get: (key) => {
+    if (!key) return null
     try {
       const val = localStorage.getItem(key)
       return val ? JSON.parse(val) : null
     } catch { return null }
   },
   set: (key, val) => {
+    if (!key) return
     try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
   },
-  remove: (key) => localStorage.removeItem(key),
+  remove: (key) => {
+    if (!key) return
+    localStorage.removeItem(key)
+  },
 }
 
-// Profile
-export const getProfile = () => storage.get(KEYS.PROFILE) || {
-  name: 'Student',
-  target: 'NEET 2025',
-  avatar: null,
+// ─── One-time migration from global unscoped keys to user-scoped keys ───
+// Call once when a user authenticates. Attributes old data to the currently
+// logged-in user (best-effort — we can't retroactively determine who owned it).
+export const migrateStorageForUser = (uid) => {
+  if (!uid) return
+  let migrated = 0
+  Object.entries(BASE_KEYS).forEach(([, base]) => {
+    const oldVal = localStorage.getItem(base)
+    if (oldVal !== null) {
+      const newKey = scopedKey(base, uid)
+      // Only migrate if the new scoped key doesn't already exist
+      if (localStorage.getItem(newKey) === null) {
+        localStorage.setItem(newKey, oldVal)
+        migrated++
+      }
+      // Always delete the old global key to prevent future leaks
+      localStorage.removeItem(base)
+    }
+  })
+  // Also migrate appearance
+  const oldAppearance = localStorage.getItem('ntp_appearance')
+  if (oldAppearance !== null) {
+    const newKey = `ntp_appearance_${uid}`
+    if (localStorage.getItem(newKey) === null) {
+      localStorage.setItem(newKey, oldAppearance)
+      migrated++
+    }
+    localStorage.removeItem('ntp_appearance')
+  }
+  if (migrated > 0) {
+    console.log(`[storage] Migrated ${migrated} localStorage entries for user ${uid.slice(0, 8)}...`)
+  }
 }
-export const saveProfile = (data) => storage.set(KEYS.PROFILE, data)
 
-// Tests history
-export const getTests = () => storage.get(KEYS.TESTS) || []
-export const saveTest = (test) => {
-  const tests = getTests()
+// ─── Profile ───
+export const getProfile = (uid) => {
+  if (!uid) return { name: 'Student', target: 'NEET 2025', avatar: null }
+  return storage.get(scopedKey(BASE_KEYS.PROFILE, uid)) || {
+    name: 'Student',
+    target: 'NEET 2025',
+    avatar: null,
+  }
+}
+export const saveProfile = (uid, data) => storage.set(scopedKey(BASE_KEYS.PROFILE, uid), data)
+
+// ─── Tests history ───
+export const getTests = (uid) => {
+  if (!uid) return []
+  return storage.get(scopedKey(BASE_KEYS.TESTS, uid)) || []
+}
+export const saveTest = (uid, test) => {
+  if (!uid) return
+  const tests = getTests(uid)
   const idx = tests.findIndex(t => t.id === test.id)
   if (idx >= 0) tests[idx] = test
   else tests.unshift(test)
-  storage.set(KEYS.TESTS, tests)
+  storage.set(scopedKey(BASE_KEYS.TESTS, uid), tests)
 }
-export const getTest = (id) => getTests().find(t => t.id === id)
-export const deleteTest = (id) => {
-  const tests = getTests().filter(t => t.id !== id)
-  storage.set(KEYS.TESTS, tests)
+export const getTest = (uid, id) => getTests(uid).find(t => t.id === id)
+export const deleteTest = (uid, id) => {
+  if (!uid) return
+  const tests = getTests(uid).filter(t => t.id !== id)
+  storage.set(scopedKey(BASE_KEYS.TESTS, uid), tests)
 }
 
-// Bookmarks
-export const getBookmarks = () => storage.get(KEYS.BOOKMARKS) || []
-export const toggleBookmark = (question) => {
-  const bm = getBookmarks()
+// ─── Bookmarks ───
+export const getBookmarks = (uid) => {
+  if (!uid) return []
+  return storage.get(scopedKey(BASE_KEYS.BOOKMARKS, uid)) || []
+}
+export const toggleBookmark = (uid, question) => {
+  if (!uid) return false
+  const bm = getBookmarks(uid)
   const idx = bm.findIndex(b => b.id === question.id)
   if (idx >= 0) bm.splice(idx, 1)
   else bm.unshift({ ...question, savedAt: Date.now() })
-  storage.set(KEYS.BOOKMARKS, bm)
+  storage.set(scopedKey(BASE_KEYS.BOOKMARKS, uid), bm)
   return idx < 0
 }
-export const isBookmarked = (id) => getBookmarks().some(b => b.id === id)
+export const isBookmarked = (uid, id) => getBookmarks(uid).some(b => b.id === id)
 
 export const DEFAULT_SETTINGS = {
   geminiKey: '',
@@ -106,25 +162,29 @@ export const DEFAULT_SETTINGS = {
   screenReader: false,
 }
 
-// Settings
-export const getSettings = () => {
-  const local = storage.get(KEYS.SETTINGS) || {}
-  const merged = { ...DEFAULT_SETTINGS, ...local }
-  return merged
+// ─── Settings ───
+export const getSettings = (uid) => {
+  if (!uid) return { ...DEFAULT_SETTINGS }
+  const local = storage.get(scopedKey(BASE_KEYS.SETTINGS, uid)) || {}
+  return { ...DEFAULT_SETTINGS, ...local }
 }
-export const saveSettings = (s) => {
-  storage.set(KEYS.SETTINGS, s)
+export const saveSettings = (uid, s) => {
+  if (!uid) return
+  storage.set(scopedKey(BASE_KEYS.SETTINGS, uid), s)
   window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: s }))
 }
 
-// Current test (in progress)
-export const getCurrentTest = () => storage.get(KEYS.CURRENT_TEST)
-export const saveCurrentTest = (data) => storage.set(KEYS.CURRENT_TEST, data)
-export const clearCurrentTest = () => storage.remove(KEYS.CURRENT_TEST)
+// ─── Current test (in progress) ───
+export const getCurrentTest = (uid) => {
+  if (!uid) return null
+  return storage.get(scopedKey(BASE_KEYS.CURRENT_TEST, uid))
+}
+export const saveCurrentTest = (uid, data) => storage.set(scopedKey(BASE_KEYS.CURRENT_TEST, uid), data)
+export const clearCurrentTest = (uid) => storage.remove(scopedKey(BASE_KEYS.CURRENT_TEST, uid))
 
-// Analytics helpers
-export const getAnalytics = () => {
-  const tests = getTests().filter(t => t.completed)
+// ─── Analytics helpers ───
+export const getAnalytics = (uid) => {
+  const tests = getTests(uid).filter(t => t.completed)
   if (!tests.length) return null
 
   const subjects = ['physics', 'chemistry', 'biology']

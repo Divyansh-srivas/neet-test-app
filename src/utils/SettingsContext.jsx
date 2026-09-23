@@ -7,28 +7,41 @@ const SettingsContext = createContext({});
 
 export const useSettings = () => useContext(SettingsContext);
 
+// Helper to get the user-scoped settings key
+const settingsKey = (uid) => uid ? `ntp_settings_${uid}` : null;
+
 export const SettingsProvider = ({ children }) => {
   const { user } = useAuth();
-  const [settings, setSettings] = useState(() => {
-    try {
-      const local = localStorage.getItem('ntp_settings');
-      return local ? { ...DEFAULT_SETTINGS, ...JSON.parse(local) } : DEFAULT_SETTINGS;
-    } catch {
-      return DEFAULT_SETTINGS;
-    }
-  });
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [toastMessage, setToastMessage] = useState(null);
 
+  // When user changes, load their scoped settings
   useEffect(() => {
-    if (user?.id) {
-      getUserSettings(user.id).then(fetchedSettings => {
+    if (user?.uid) {
+      // Load from user-scoped localStorage first for instant render
+      try {
+        const key = settingsKey(user.uid);
+        const local = key ? localStorage.getItem(key) : null;
+        if (local) {
+          setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(local) });
+        } else {
+          setSettings(DEFAULT_SETTINGS);
+        }
+      } catch {
+        setSettings(DEFAULT_SETTINGS);
+      }
+
+      // Then fetch from server
+      getUserSettings(user.id || user.uid).then(fetchedSettings => {
         setSettings(fetchedSettings);
-        localStorage.setItem('ntp_settings', JSON.stringify(fetchedSettings));
+        const key = settingsKey(user.uid);
+        if (key) localStorage.setItem(key, JSON.stringify(fetchedSettings));
       });
     } else {
+      // No user — reset to defaults, don't touch localStorage
       setSettings(DEFAULT_SETTINGS);
     }
-  }, [user?.id]);
+  }, [user?.uid]);
 
   const showToast = (message, isError = false) => {
     setToastMessage({ message, isError });
@@ -41,39 +54,41 @@ export const SettingsProvider = ({ children }) => {
     
     // Optimistic UI update
     setSettings(next);
-    localStorage.setItem('ntp_settings', JSON.stringify(next));
+    const storageKeyStr = settingsKey(user?.uid);
+    if (storageKeyStr) localStorage.setItem(storageKeyStr, JSON.stringify(next));
 
-    if (user?.id) {
+    if (user?.id || user?.uid) {
       try {
-        await updateUserSettings(user.id, next);
+        await updateUserSettings(user.id || user.uid, next);
         showToast('Settings saved');
       } catch (err) {
         // Rollback
         setSettings(prev);
-        localStorage.setItem('ntp_settings', JSON.stringify(prev));
+        if (storageKeyStr) localStorage.setItem(storageKeyStr, JSON.stringify(prev));
         showToast('Failed to save settings', true);
       }
     }
-  }, [settings, user?.id]);
+  }, [settings, user?.uid, user?.id]);
 
   const updateMultipleSettings = useCallback(async (newSettingsPartial) => {
     const prev = { ...settings };
     const next = { ...prev, ...newSettingsPartial };
     
     setSettings(next);
-    localStorage.setItem('ntp_settings', JSON.stringify(next));
+    const storageKeyStr = settingsKey(user?.uid);
+    if (storageKeyStr) localStorage.setItem(storageKeyStr, JSON.stringify(next));
 
-    if (user?.id) {
+    if (user?.id || user?.uid) {
       try {
-        await updateUserSettings(user.id, next);
+        await updateUserSettings(user.id || user.uid, next);
         showToast('Settings saved');
       } catch (err) {
         setSettings(prev);
-        localStorage.setItem('ntp_settings', JSON.stringify(prev));
+        if (storageKeyStr) localStorage.setItem(storageKeyStr, JSON.stringify(prev));
         showToast('Failed to save settings', true);
       }
     }
-  }, [settings, user?.id]);
+  }, [settings, user?.uid, user?.id]);
 
   return (
     <SettingsContext.Provider value={{ settings, updateSetting, updateMultipleSettings, showToast }}>

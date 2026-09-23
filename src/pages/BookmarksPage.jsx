@@ -1,19 +1,21 @@
 import React, { useState, useEffect } from 'react'
 import { getBookmarks, toggleBookmark } from '../utils/storage'
+import { useAuth } from '../utils/useAuth'
 import { Bookmark, BookmarkX, Filter } from 'lucide-react'
 import MathText from '../components/MathText'
 
 const SUB_COLORS = { Physics: 'var(--accent)', Chemistry: 'var(--green)', Biology: 'var(--yellow)' }
 
 export default function BookmarksPage() {
+  const { user } = useAuth()
   const [bookmarks, setBookmarks] = useState([])
   const [filter, setFilter] = useState('All')
 
-  useEffect(() => { setBookmarks(getBookmarks()) }, [])
+  useEffect(() => { setBookmarks(getBookmarks(user?.uid)) }, [user?.uid])
 
   const handleRemove = (q) => {
-    toggleBookmark(q)
-    setBookmarks(getBookmarks())
+    toggleBookmark(user?.uid, q)
+    setBookmarks(getBookmarks(user?.uid))
   }
 
   const subjects = ['All', 'Physics', 'Chemistry', 'Biology']

@@ -15,6 +15,9 @@ export function JobProvider({ children }) {
   useEffect(() => {
     if (!user) {
         if (socket) socket.disconnect();
+        // Clear jobs when user logs out
+        setActiveJobs({});
+        setDismissedJobs(new Set());
         return;
     }
 
@@ -76,8 +79,8 @@ export function JobProvider({ children }) {
 
     newSocket.on('job-completed', (data) => {
         const generatedTestId = data.testId || `test_${Date.now()}`;
-        if (data.questions) {
-            saveTest({
+        if (data.questions && user?.uid) {
+            saveTest(user.uid, {
                 id: generatedTestId,
                 name: data.testName || 'AI Extracted Test',
                 questions: data.questions,

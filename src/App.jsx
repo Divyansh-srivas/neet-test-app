@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { getSettings } from './utils/storage'
+import React, { useState, useEffect, useRef } from 'react'
+import { migrateStorageForUser } from './utils/storage'
 import { AuthProvider, useAuth } from './utils/useAuth.jsx'
 import { auth } from './utils/firebase'
 import { isSignInWithEmailLink } from 'firebase/auth'
@@ -31,6 +31,20 @@ function AppContent() {
   const [forcePasswordScreen, setForcePasswordScreen] = useState(false)
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
   const [pendingStartTestId, setPendingStartTestId] = useState(null)
+  const prevUidRef = useRef(user?.uid)
+
+  // Run one-time migration and reset state when user changes
+  useEffect(() => {
+    if (user?.uid) {
+      migrateStorageForUser(user.uid)
+    }
+    // If user changed (login/logout/switch), reset page to dashboard
+    if (prevUidRef.current !== user?.uid) {
+      setPage('dashboard')
+      setActiveTest(null)
+      prevUidRef.current = user?.uid
+    }
+  }, [user?.uid])
 
   // Auto-complete sign-in when user clicks the Firebase email link
   useEffect(() => {
@@ -207,9 +221,9 @@ export default function App() {
     const applyAppearance = async (overrideSettings = null) => {
       let s = overrideSettings;
       if (!s) {
-         // Load from cache first
-         const cached = localStorage.getItem('ntp_appearance');
-         s = cached ? JSON.parse(cached) : await getAppearanceSettings();
+         // Load appearance from server (no unscoped cache — user scoping
+         // is handled inside getAppearanceSettings / SettingsContext)
+         s = await getAppearanceSettings();
       }
 
       document.body.className = '';

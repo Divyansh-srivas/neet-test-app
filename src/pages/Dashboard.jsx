@@ -6,7 +6,7 @@ import { Upload, Play, FileText, Clock, CheckCircle, Trash2, Target } from 'luci
 import { getUserAnalytics } from '../api/performance'
 
 export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, setPendingStartTestId }) {
-  const { profile: authProfile } = useAuth()
+  const { profile: authProfile, user } = useAuth()
   const [tests, setTests] = useState([])
   const [startingTest, setStartingTest] = useState(null)
   const { settings } = useSettings()
@@ -17,7 +17,7 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
   const [userAnalytics, setUserAnalytics] = useState(null)
 
   useEffect(() => {
-    setTests(getTests())
+    setTests(getTests(user?.uid))
     if (authProfile?.id) {
       const settings = authProfile.accessibility_settings || {};
       setPerfSettings({
@@ -43,8 +43,8 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
 
   const handleDeleteTest = (id) => {
     if (window.confirm('Are you sure you want to delete this test?')) {
-      deleteTest(id)
-      setTests(getTests())
+      deleteTest(user?.uid, id)
+      setTests(getTests(user?.uid))
     }
   }
 

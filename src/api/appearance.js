@@ -7,8 +7,14 @@ const DEFAULT_SETTINGS = {
   animations: true
 };
 
-export const getAppearanceSettings = async (userId) => {
-  const cached = localStorage.getItem('ntp_appearance');
+// User-scoped appearance key
+const appearanceKey = (uid) => uid ? `ntp_appearance_${uid}` : null;
+
+export const getAppearanceSettings = async (userId, uid) => {
+  // uid is the Firebase UID for localStorage scoping
+  // userId is the Supabase profile ID for DB fetch
+  const key = appearanceKey(uid || userId);
+  const cached = key ? localStorage.getItem(key) : null;
   let settings = cached ? JSON.parse(cached) : DEFAULT_SETTINGS;
 
   if (userId) {
@@ -21,7 +27,7 @@ export const getAppearanceSettings = async (userId) => {
 
       if (!error && data?.appearance_settings) {
         settings = { ...DEFAULT_SETTINGS, ...data.appearance_settings };
-        localStorage.setItem('ntp_appearance', JSON.stringify(settings));
+        if (key) localStorage.setItem(key, JSON.stringify(settings));
         window.dispatchEvent(new CustomEvent('appearanceUpdated', { detail: settings }));
       }
     } catch (err) {
@@ -31,8 +37,9 @@ export const getAppearanceSettings = async (userId) => {
   return settings;
 };
 
-export const updateAppearanceSettings = async (userId, settings) => {
-  localStorage.setItem('ntp_appearance', JSON.stringify(settings));
+export const updateAppearanceSettings = async (userId, settings, uid) => {
+  const key = appearanceKey(uid || userId);
+  if (key) localStorage.setItem(key, JSON.stringify(settings));
   window.dispatchEvent(new CustomEvent('appearanceUpdated', { detail: settings }));
 
   if (!userId) return;
@@ -49,4 +56,3 @@ export const updateAppearanceSettings = async (userId, settings) => {
     throw err;
   }
 };
-
