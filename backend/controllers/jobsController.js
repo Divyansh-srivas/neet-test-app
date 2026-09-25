@@ -24,6 +24,7 @@ export const getJobs = async (req, res, next) => {
             return res.status(200).json({ success: true, jobs: [] });
         }
         
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.status(200).json({ success: true, jobs: jobs || [] });
     } catch (error) {
         console.error('[Jobs Route Catch]:', error.message);
@@ -45,6 +46,7 @@ export const getJobStatus = async (req, res, next) => {
             if (error.code === 'PGRST116') return res.status(404).json({ error: 'Job not found' });
             throw error;
         }
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.json({ job });
     } catch (error) {
         next(error);

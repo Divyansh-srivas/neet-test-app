@@ -1,6 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import { cropAndUploadDiagram } from './densityTrimmer.js';
+import { splitPdfIntoChunk } from './pdf.service.js';
 
 const ai = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
 
@@ -91,7 +93,7 @@ export function normalizeQuestions(rawQuestions) {
             const parts = imageBox.split(',').map(s => parseFloat(s.trim()));
             if (parts.length === 4 && parts.every(n => !isNaN(n))) {
                 imageBox = {
-                    page: 1,
+                    page: q.imageBox?.page || 1,
                     box: parts
                 };
             } else {
@@ -99,12 +101,12 @@ export function normalizeQuestions(rawQuestions) {
             }
         } else if (!imageBox && q.diagramBox && q.diagramBox.ymin !== undefined) {
             imageBox = {
-                page: 1,
+                page: q.diagramBox.page || 1,
                 box: [q.diagramBox.ymin, q.diagramBox.xmin, q.diagramBox.ymax, q.diagramBox.xmax]
             };
         } else if (imageBox && typeof imageBox === 'object' && imageBox.ymin !== undefined) {
             imageBox = {
-                page: 1,
+                page: imageBox.page || 1,
                 box: [imageBox.ymin, imageBox.xmin, imageBox.ymax, imageBox.xmax]
             };
         }
@@ -133,7 +135,36 @@ export function normalizeQuestions(rawQuestions) {
 /**
  * Extract ALL questions from a SINGLE PDF PAGE buffer using Gemini's native PDF parsing.
  */
-export const extractQuestionsFromSinglePage = async (pagePdfBuffer) => {
+async function verifyCrop(imageUrl, aiClient, qData) {
+    try {
+        const res = await fetch(imageUrl);
+        if (!res.ok) return false;
+        const b64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+        
+        let promptText = 'Analyze this image carefully. Is there any "ghosting" (mirrored or chopped-off text artifacts), or leaked question/footer text at the very top or bottom edge?';
+        if (qData) {
+            promptText = `Analyze this image carefully.
+1. Is there any "ghosting" (mirrored or chopped-off text artifacts), or leaked question/footer text at the very top or bottom edge?
+2. Does the content of this image match the target question? The question text is: "${qData.questionText}". Options are: ${JSON.stringify(qData.options)}. The image MUST contain elements, diagrams, or text that clearly relate to this question. If it is from a different question entirely, it is BAD.`;
+        }
+        promptText += '\nAnswer EXACTLY in this format:\nVERDICT: [CLEAN or BAD]\nREASON: [If bad, describe the exact text/ghosting seen, or why it does not match]';
+        
+        const response = await aiClient.models.generateContent({
+            model: 'gemini-3.5-flash',
+            contents: [{ role: 'user', parts: [
+                { inlineData: { mimeType: 'image/png', data: b64 } },
+                { text: promptText }
+            ]}]
+        });
+        const txt = response.text.trim();
+        const verdictMatch = txt.match(/VERDICT:\s*(CLEAN|BAD)/i);
+        return verdictMatch && verdictMatch[1].toUpperCase() === 'CLEAN';
+    } catch(e) {
+        return false;
+    }
+}
+
+export const extractQuestionsFromSinglePage = async (pagePdfBuffer, testId = 'temp', filePath, startPage, endPage) => {
     const base64Pdf = pagePdfBuffer.toString('base64');
     const sizeKB = Math.round(base64Pdf.length / 1024);
     
@@ -158,7 +189,16 @@ MANDATORY RULES:
    - CORRECT: "Match the following:\n1. Mitochondria - Powerhouse\n2. Ribosome - Protein synthesis"
    - WRONG:   "Column I | Column II\n:---|:---\nMitochondria | Powerhouse"   (pipe/markdown FORBIDDEN)
 6. DIAGRAMS & FIGURES: Only set 'imageBox' when the question contains an actual VISUAL element: photograph, drawn diagram, anatomical figure, graph/chart, chemical structure, or circuit diagram.
-   Do NOT set imageBox for text-only tables, assertion tables, or column-matching text. If valid, use "imageBox": { "ymin": 120, "xmin": 50, "ymax": 450, "xmax": 600 } (scale 0-1000) and "hasDiagram": true.
+   - CRITICAL BOUNDING BOX RULE: Your imageBox must capture EXACTLY the figure content needed to answer the question — nothing less, nothing more.
+     * INCLUDE: the diagram/graph/circuit/chemical structure/table itself, all its internal labels, axis values, numbers, component values. 
+     * INCLUDE VISUAL OPTIONS: If the answer options themselves are visual (e.g., 4 small graphs, 4 small diagrams labeled (1)-(4)), you MUST include ALL of those option-graphs as part of the SAME imageBox. Stretch the ymax downwards to encompass them.
+     * EXCLUDE (CRITICAL): The question's own stem text repeated above the figure, answer options that are plain text/formulas, headers, footers, institute names, date stamps, "Space for Rough Work", and anything from adjacent questions.
+     * DO NOT let the bounding box touch ANY text that is part of the question itself (e.g. "Water flows through a frictionless duct...", "In given LCR circuit..."). Start the box strictly AT the first visual pixel of the diagram.
+
+   - Example A (OVER-INCLUSION - BAD): For a duct-flow diagram, drawing a box that includes the text "Water flows through a frictionless duct..." above it and the page footer below it. Correct behavior: tightly crop only the duct diagram (and its visual options if they exist), EXCLUDING the textual stem.
+   - Example B (UNDER-INCLUSION - BAD): A question where a main diagram is followed by 4 small graph answer options labeled (1)-(4). Drawing a box that stops at the main diagram alone. Correct behavior: extend the box downwards to include all 4 graphs.
+   
+   - Do NOT set imageBox for text-only tables, assertion tables, or column-matching text. If valid, use "imageBox": { "page": 1, "box": [0.12, 0.5, 0.45, 0.9] } (scale 0-1) and "hasDiagram": true. Note that "page" MUST be the 1-indexed page number WITHIN the PDF chunk provided (e.g. 1 or 2).
 7. JSON ESCAPING: Correctly escape all backslashes. To output $\\frac{1}{2}$ write "$\\\\frac{1}{2}$" in the JSON string. Do NOT output raw control characters.
 8. ANSWER KEYS: Extract if available; else set "correctAnswer": "A" and "explanation": null.
 9. SUBJECT DETECTION: Classify based on content — "Physics", "Chemistry", or "Biology". Ignore question numbering order.
@@ -173,7 +213,7 @@ OUTPUT: Return a valid JSON array of question objects. No markdown fences. No ex
     "chapter": "Kinematics",
     "questionText": "Full question text including all sub-parts",
     "hasDiagram": false,
-    "imageBox": null,
+    "imageBox": null, // If it has a diagram, MUST be: { "page": 1, "box": [0.12, 0.5, 0.45, 0.9] }
     "options": {
       "A": "Option A text",
       "B": "Option B text",
@@ -207,9 +247,17 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                 questionText: { type: "string" },
                 hasDiagram: { type: "boolean" },
                 imageBox: {
-                    type: "string",
+                    type: "object",
                     nullable: true,
-                    description: "If there is a diagram, output exactly 4 numbers separated by commas: 'ymin,xmin,ymax,xmax'. E.g. '0.2,0.1,0.4,0.9'. Values must be between 0 and 1. Leave null if no diagram."
+                    description: "If there is a diagram, output an object with 'page' (the 1-indexed page number within the chunk, e.g. 1 or 2) and 'box' (array of 4 numbers [ymin, xmin, ymax, xmax] scaled 0 to 1). Leave null if no diagram.",
+                    properties: {
+                        page: { type: "number" },
+                        box: {
+                            type: "array",
+                            items: { type: "number" }
+                        }
+                    },
+                    required: ["page", "box"]
                 },
                 options: {
                     type: "object",
@@ -355,9 +403,40 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                 logger.warn(`[GEMINI NATIVE] Control characters found in raw text! Escaping unambiguous ones.`);
                 throw new Error("UNREPAIRABLE_CONTROL_CHARACTERS_FOUND");
             }
-
             const normalized = normalizeQuestions(safeParsedRaw);
-            
+
+            // Post-process all image boxes: PASS 2 VISUAL HUNT
+            for (const q of normalized) {
+                if (q.hasDiagram) {
+                    try {
+                        let finalUrl = null;
+                        
+                        // Only perform the hunt if we have the context args
+                        if (filePath && startPage && endPage) {
+                            finalUrl = await performPass2Hunt(q, filePath, startPage, endPage, testId, ai);
+                        } else {
+                            logger.warn(`[GEMINI NATIVE] Missing context args for Pass 2 Hunt on Q${q.questionNumber || q.qNum}. Diagram will be skipped.`);
+                        }
+                        
+                        if (finalUrl) {
+                            q.imageUrl = finalUrl;
+                            q.imageBox = null;
+                        } else {
+                            // Safe default: if hunt fails or no context, we don't show an image.
+                            logger.warn(`[GEMINI NATIVE] Pass 2 Hunt failed to find verified diagram for Q${q.questionNumber || q.qNum}. Setting NO image.`);
+                            q.imageUrl = null;
+                            q.imageBox = null;
+                            q.hasDiagram = false;
+                        }
+                    } catch (e) {
+                        logger.error(`[GEMINI NATIVE] Pass 2 Hunt threw error for Q${q.questionNumber || q.qNum}: ${e.message}`);
+                        q.imageUrl = null;
+                        q.imageBox = null;
+                        q.hasDiagram = false;
+                    }
+                }
+            }
+
             logger.info(`[GEMINI NATIVE] Parsed ${normalized.length} questions from page`);
             extractedQuestions = normalized;
             success = true;
@@ -404,3 +483,62 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
 };
 
 // Remove extractQuestionsFromPDFBuffer and extractQuestionsFromChunk entirely to prevent their usage
+
+export async function performPass2Hunt(q, filePath, startPage, endPage, testId, aiClient) {
+    const windowStart = Math.max(1, startPage - 3);
+    const windowEnd = endPage + 3;
+    const b64 = await splitPdfIntoChunk(filePath, windowStart, windowEnd);
+    const buf = Buffer.from(b64, 'base64');
+    
+    let bestBox = null;
+    let bestPageInWindow = 1;
+    let isClean = false;
+    let finalUrl = null;
+    
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        logger.info(`[GEMINI PASS 2] Q${q.questionNumber || q.qNum} Hunt Attempt ${attempt}/2 in pages ${windowStart}-${windowEnd}`);
+        try {
+            const prompt = `Find the diagram that corresponds to this exact question text: "${q.questionText}". 
+Options are: ${JSON.stringify(q.options)}.
+Return the bounding box of this diagram within the provided PDF. 
+Respond with ONLY a JSON object in this format: { "page": [1, 2, or 3 relative to this chunk], "box": [ymin, xmin, ymax, xmax] }. If you absolutely cannot find it, return { "box": null }.`;
+
+            const res = await aiClient.models.generateContent({
+                model: 'gemini-3.6-flash',
+                contents: [
+                    { inlineData: { data: b64, mimeType: 'application/pdf' } },
+                    { text: prompt }
+                ]
+            });
+            const txt = res.text.replace(/```/g, '').replace(/json/g, '').trim();
+            const parsed = JSON.parse(txt);
+            
+            if (parsed && parsed.box && parsed.box.length === 4) {
+                bestBox = parsed.box;
+                bestPageInWindow = parsed.page || 1;
+                
+                const absoluteTargetPage = windowStart + bestPageInWindow - 1;
+                const specificPageB64 = await splitPdfIntoChunk(filePath, absoluteTargetPage, absoluteTargetPage);
+                const specificPageBuf = Buffer.from(specificPageB64, 'base64');
+                
+                const cropUrl = await cropAndUploadDiagram(specificPageBuf, bestBox, testId, q.questionNumber || q.qNum);
+                if (cropUrl) {
+                    isClean = await verifyCrop(cropUrl, aiClient, q);
+                    if (isClean) {
+                        finalUrl = cropUrl;
+                        logger.info(`[GEMINI PASS 2] Q${q.questionNumber || q.qNum} Hunt SUCCESS!`);
+                        break;
+                    } else {
+                        logger.warn(`[GEMINI PASS 2] Q${q.questionNumber || q.qNum} verification failed on attempt ${attempt}`);
+                    }
+                }
+            } else {
+                logger.warn(`[GEMINI PASS 2] Q${q.questionNumber || q.qNum} no box found by Gemini on attempt ${attempt}`);
+            }
+        } catch (e) {
+            logger.warn(`[GEMINI PASS 2] Hunt attempt ${attempt} failed: ${e.message}`);
+        }
+    }
+    
+    return finalUrl;
+}
