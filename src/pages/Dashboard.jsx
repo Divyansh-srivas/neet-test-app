@@ -63,10 +63,14 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
     }
   }, [pendingStartTestId, tests, setPendingStartTestId])
 
-  const handleDeleteTest = (id) => {
+  const handleDeleteTest = async (id) => {
     if (window.confirm('Are you sure you want to delete this test?')) {
       deleteTest(user?.uid, id)
       setTests(getTests(user?.uid))
+      if (user?.uid) {
+        // Also delete from backend so it doesn't re-sync on refresh
+        await supabase.from('tests').delete().eq('id', id).eq('teacher_id', user.uid);
+      }
     }
   }
 
