@@ -1,5 +1,5 @@
 import React from 'react';
-import { InlineMath } from 'react-katex';
+import { InlineMath, BlockMath } from 'react-katex';
 
 /**
  * Renders a single line of text that may contain $...$ or $$...$$ math spans.
@@ -36,12 +36,12 @@ function MathSegment({ text }) {
                 if (segment.startsWith('$$') && segment.endsWith('$$') && segment.length > 4) {
                     const mathString = segment.slice(2, -2).trim();
                     return (
-                        <InlineMath
+                        <BlockMath
                             key={index}
                             math={mathString}
                             renderError={(error) => {
                                 console.warn('KaTeX error (display):', error.message, 'for:', mathString);
-                                return <span style={{ color: 'inherit' }}>{segment}</span>;
+                                return <div style={{ color: 'inherit' }}>{segment}</div>;
                             }}
                         />
                     );
@@ -49,6 +49,21 @@ function MathSegment({ text }) {
                 // $...$ inline math
                 if (segment.startsWith('$') && segment.endsWith('$') && segment.length > 2) {
                     const mathString = segment.slice(1, -1);
+                    const isBlockLevel = mathString.includes('\\begin{') || mathString.includes('\\displaystyle');
+                    
+                    if (isBlockLevel) {
+                        return (
+                            <BlockMath
+                                key={index}
+                                math={mathString}
+                                renderError={(error) => {
+                                    console.warn('KaTeX error (promoted display):', error.message, 'for:', mathString);
+                                    return <div style={{ color: 'inherit' }}>{segment}</div>;
+                                }}
+                            />
+                        );
+                    }
+                    
                     return (
                         <InlineMath
                             key={index}
