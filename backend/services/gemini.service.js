@@ -164,17 +164,22 @@ async function verifyCrop(imageUrl, aiClient, qData) {
     }
 }
 
-export const extractQuestionsFromSinglePage = async (pagePdfBuffer, testId = 'temp', filePath, startPage, endPage) => {
+export const extractQuestionsFromSinglePage = async (pagePdfBuffer, testId = 'temp', filePath, startPage, endPage, language = 'English') => {
     const base64Pdf = pagePdfBuffer.toString('base64');
     const sizeKB = Math.round(base64Pdf.length / 1024);
     
-    logger.info(`[GEMINI NATIVE] Sending single PDF page to Gemini (${sizeKB} KB base64)`);
+    logger.info(`[GEMINI NATIVE] Sending single PDF page to Gemini (${sizeKB} KB base64) with language constraint: ${language}`);
+
+    let languageRule = `1. Extract ALL questions from this page. Do NOT skip any question.`;
+    if (language !== 'Bilingual') {
+        languageRule = `1. LANGUAGE CONSTRAINT: The user strictly requested ${language}. If the document contains multiple languages side-by-side (e.g., English and Hindi), you MUST COMPLETELY IGNORE the other language and ONLY extract the ${language} version of the questions and options. Missing a ${language} question or extracting a duplicate in another language is a fatal failure.`;
+    }
 
     const prompt = `You are an expert NTA NEET exam digitizer and question extractor. 
 Analyze this SINGLE PAGE PDF document and extract EVERY SINGLE multiple choice question from it.
 
 MANDATORY RULES:
-1. Extract ALL questions from this page. Do NOT skip any question.
+${languageRule}
 2. NORMALIZE OPTIONS: Map all option identifiers to "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
 3. LATEX FORMULAS — each mathematical expression must have its OWN separate $...$ pair. NEVER let English words appear inside $...$.
    - CORRECT: "the dimensions of $\\frac{A}{B}$ and $\\frac{C}{D}$ are"  (two separate pairs, space between them)

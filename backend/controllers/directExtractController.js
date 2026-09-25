@@ -12,6 +12,7 @@ export const uploadAndExtractDirect = async (req, res) => {
         const file = req.file;
         const testName = req.body.testName || 'Untitled Test';
         const duration = parseInt(req.body.duration) || 120;
+        const language = req.body.language || 'English';
         const userId = req.user.id;
 
         if (!file) {
@@ -123,7 +124,7 @@ export const uploadAndExtractDirect = async (req, res) => {
                                 console.log(`[WORKER] Sending Page ${pageNum} to Gemini (${pageBuffer.length} bytes)...`);
                                 try {
                                     // 1. Extract from Gemini (Sequential zero-loss retry happens inside here)
-                                    const questions = await extractQuestionsFromSinglePage(pageBuffer);
+                                    const questions = await extractQuestionsFromSinglePage(pageBuffer, testName, finalPath, pageNum, pageNum, language);
                                     console.log(`[WORKER] Page ${pageNum} extracted: ${questions.length} questions`);
                                     
                                     // 2. Process Diagram Cropping (Non-blocking array)

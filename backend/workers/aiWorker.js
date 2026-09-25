@@ -8,7 +8,7 @@ import { ensureLocalFile } from '../services/storageSync.js';
 
 export const createAiWorker = (io) => {
     return new Worker('ai-extraction-local', async job => {
-        const { jobId, userId, filePath, storagePath, token, testName, duration } = job.data;
+        const { jobId, userId, filePath, storagePath, token, testName, duration, language = 'English' } = job.data;
         const supabase = supabaseAdmin;
         
         try {
@@ -68,7 +68,7 @@ export const createAiWorker = (io) => {
                             const startTime = Date.now();
                             logger.info(`[gemini] job=${jobId} chunk ${chunkIdx}/${chunkTasks} (p${startPage}-p${endPage}) worker-attempt ${attempt}/3 (model=${process.env.GEMINI_MODEL || 'gemini-3.6-flash'})`);
                             
-                            const result = await extractQuestionsFromSinglePage(pageBuffer, jobId, filePath, startPage, endPage);
+                            const result = await extractQuestionsFromSinglePage(pageBuffer, jobId, filePath, startPage, endPage, language);
                             
                             logger.info(`[gemini] job=${jobId} chunk ${chunkIdx}/${chunkTasks} responded in ${Date.now() - startTime}ms`);
                             

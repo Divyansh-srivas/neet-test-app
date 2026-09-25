@@ -16,6 +16,7 @@ export default function UploadPage({ setPage, setActiveTest }) {
   const [drag, setDrag] = useState(false)
   const [durationHours, setDurationHours] = useState(3)
   const [durationMins, setDurationMins] = useState(0)
+  const [language, setLanguage] = useState('English')
   const fileRef = useRef()
   const { uploadPdf, clearAllJobs } = useJob()
 
@@ -54,7 +55,7 @@ export default function UploadPage({ setPage, setActiveTest }) {
 
     try {
       const duration = (parseInt(durationHours) || 0) * 3600 + (parseInt(durationMins) || 0) * 60;
-      await uploadPdf(file, testName, duration);
+      await uploadPdf(file, testName, duration, language);
       setStatus('success');
       setMessage('Upload complete. Extraction is running in the background. You may safely navigate away.');
       setFile(null);
@@ -90,6 +91,27 @@ export default function UploadPage({ setPage, setActiveTest }) {
             }}
           />
         </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 13, color: '#94a3b8', display: 'block', marginBottom: 6 }}>Question Language</label>
+          <select
+            value={language}
+            onChange={e => setLanguage(e.target.value)}
+            disabled={status === 'loading'}
+            style={{
+              width: '100%', padding: '12px 14px', background: 'var(--surface)',
+              border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)',
+              fontSize: 14, outline: 'none', opacity: status === 'loading' ? 0.6 : 1,
+              appearance: 'none', cursor: 'pointer'
+            }}
+          >
+            <option value="English">English</option>
+            <option value="Hindi">Hindi</option>
+            <option value="Bilingual">Bilingual (Both)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 16, display: 'flex', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <label style={{ fontSize: 13, color: '#94a3b8', display: 'block', marginBottom: 6 }}>Hours</label>
           <input

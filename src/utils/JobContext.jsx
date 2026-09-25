@@ -136,7 +136,7 @@ export function JobProvider({ children }) {
   }, [user]);
 
   const fetchExistingJobs = async () => {
-      const res = await fetchAPI('/api/jobs');
+      const res = await fetchAPI(`/api/jobs?t=${Date.now()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.jobs) {
@@ -176,11 +176,12 @@ export function JobProvider({ children }) {
       }
   };
 
-  const uploadPdf = async (file, testName, duration) => {
+  const uploadPdf = async (file, testName, duration, language = 'English') => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('testName', testName);
       formData.append('duration', duration);
+      formData.append('language', language);
 
       const res = await fetchAPI('/api/upload', {
           method: 'POST',
