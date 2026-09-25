@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { getTests, deleteTest } from '../utils/storage'
 import { useSettings } from '../utils/SettingsContext'
 import { useAuth } from '../utils/useAuth.jsx'
-import { Upload, Play, FileText, Clock, CheckCircle, Trash2, Target } from 'lucide-react'
+import { Upload, Play, FileText, Clock, CheckCircle, Trash2, Target, DownloadCloud } from 'lucide-react'
 import { getUserAnalytics } from '../api/performance'
+import { supabase } from '../utils/supabaseClient'
 
 export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, setPendingStartTestId }) {
   const { profile: authProfile, user } = useAuth()
@@ -17,7 +18,28 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
   const [userAnalytics, setUserAnalytics] = useState(null)
 
   useEffect(() => {
-    setTests(getTests(user?.uid))
+    import('../utils/storage').then(({ getTest, saveTest, getTests }) => {
+        setTests(getTests(user?.uid));
+        
+        if (user?.uid) {
+            supabase.from('tests').select('*').eq('teacher_id', user.uid).then(({ data, error }) => {
+                if (error) console.error("Error fetching sync tests:", error.message);
+                if (data && data.length > 0) {
+                    data.forEach(t => {
+                        const existing = getTest(user.uid, t.id);
+                        if (existing) {
+                            // Merges new questions and PDF URL, preserving answers, completed state, score
+                            saveTest(user.uid, { ...existing, questions: t.questions, pdfUrl: existing.pdfUrl || t.questions?.[0]?.pdfUrl, title: t.name || t.title });
+                        } else {
+                            saveTest(user.uid, { ...t, title: t.name, pdfUrl: t.questions?.[0]?.pdfUrl });
+                        }
+                    });
+                    setTests(getTests(user.uid));
+                }
+            });
+        }
+    });
+
     if (authProfile?.id) {
       const settings = authProfile.accessibility_settings || {};
       setPerfSettings({
@@ -29,7 +51,7 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
       })
       getUserAnalytics(authProfile.id).then(setUserAnalytics).catch(console.error)
     }
-  }, [authProfile?.id])
+  }, [user?.uid, authProfile?.id])
 
   useEffect(() => {
     if (pendingStartTestId && tests.length > 0) {
@@ -84,14 +106,16 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
             Upload PDFs to generate tests and start your practice
           </p>
         </div>
-        <button onClick={() => setPage('upload')} style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: 'white',
-          border: 'none', borderRadius: 12, padding: '12px 22px', cursor: 'pointer',
-          fontWeight: 700, fontSize: 14
-        }}>
-          <Upload size={16} /> Upload PDF
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button onClick={() => setPage('upload')} style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'linear-gradient(135deg, var(--accent), var(--accent2))', color: 'white',
+            border: 'none', borderRadius: 12, padding: '12px 22px', cursor: 'pointer',
+            fontWeight: 700, fontSize: 14
+          }}>
+            <Upload size={16} /> Upload PDF
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
