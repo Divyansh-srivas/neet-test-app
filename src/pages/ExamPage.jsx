@@ -6,7 +6,7 @@ import NotesPad from '../components/NotesPad'
 import { useAuth } from '../utils/useAuth'
 import { createNotification } from '../api/notifications'
 import { startTestAttempt, saveAttemptState, submitAttempt, recordViolation } from '../api/exam'
-import PdfImageCropper from '../components/PdfImageCropper'
+
 import MathText from '../components/MathText'
 
 
@@ -572,25 +572,17 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
             {/* Question Text */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, marginBottom: 24, lineHeight: 1.7, fontSize: questionFontSize }}>
               <MathText text={q.question} />
-              {q.imageUrl ? (
+              {(q.imageUrl || q.diagramUrl) ? (
                 <div style={{ marginTop: 20, textAlign: 'center', position: 'relative', display: 'inline-block' }}>
                   <img 
-                    src={q.imageUrl} 
+                    src={q.imageUrl || q.diagramUrl} 
                     alt="Question Diagram" 
-                    onClick={() => setZoomedImage(q.imageUrl)}
+                    onClick={() => setZoomedImage(q.imageUrl || q.diagramUrl)}
                     style={{ maxWidth: '100%', maxHeight: 400, borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }} 
                   />
                   <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(0,0,0,0.6)', color: 'white', padding: '4px 8px', borderRadius: 6, fontSize: 11, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <ZoomIn size={14} /> Click to zoom
                   </div>
-                </div>
-              ) : (q.imageBox && (q.pdfUrl || test.pdfUrl || test.pdf_url)) ? (
-                <div style={{ marginTop: 20, textAlign: 'center' }}>
-                    <PdfImageCropper 
-                        pdfUrl={q.pdfUrl || test.pdfUrl || test.pdf_url} 
-                        pageNum={q.imageBox.page} 
-                        box={q.imageBox.box} 
-                    />
                 </div>
               ) : null}
             </div>
