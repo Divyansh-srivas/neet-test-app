@@ -427,17 +427,18 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                             q.imageUrl = finalUrl;
                             q.imageBox = null;
                         } else {
-                            // Safe default: if hunt fails or no context, we don't show an image.
-                            logger.warn(`[GEMINI NATIVE] Pass 2 Hunt failed to find verified diagram for Q${q.questionNumber || q.qNum}. Setting NO image.`);
-                            q.imageUrl = null;
-                            q.imageBox = null;
-                            q.hasDiagram = false;
+                            if (q.imageBox) {
+                                logger.warn(`[GEMINI NATIVE] Pass 2 Hunt failed to verify diagram for Q${q.questionNumber || q.qNum}. Falling back to Pass 1 imageBox.`);
+                            } else {
+                                logger.warn(`[GEMINI NATIVE] Pass 2 Hunt failed and no Pass 1 imageBox for Q${q.questionNumber || q.qNum}. Setting NO image.`);
+                                q.hasDiagram = false;
+                            }
                         }
                     } catch (e) {
                         logger.error(`[GEMINI NATIVE] Pass 2 Hunt threw error for Q${q.questionNumber || q.qNum}: ${e.message}`);
-                        q.imageUrl = null;
-                        q.imageBox = null;
-                        q.hasDiagram = false;
+                        if (!q.imageBox) {
+                            q.hasDiagram = false;
+                        }
                     }
                 }
             }
