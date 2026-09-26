@@ -8,7 +8,7 @@ export const config = {
     REDIS_PASSWORD: process.env.REDIS_PASSWORD || undefined,
     REDIS_URL: process.env.REDIS_URL,
     SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
-    SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     GEMINI_API_KEY: process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY,
     NODE_ENV: process.env.NODE_ENV || 'development'
 };

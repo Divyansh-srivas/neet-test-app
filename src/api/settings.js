@@ -10,7 +10,7 @@ export const getUserSettings = async (userId) => {
         .from('profiles')
         .select('accessibility_settings')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (!error && data?.accessibility_settings) {
         settings = { ...DEFAULT_SETTINGS, ...data.accessibility_settings };

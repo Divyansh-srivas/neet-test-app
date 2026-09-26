@@ -8,7 +8,7 @@ export const getAccessibilitySettings = async (userId) => {
     .from('profiles')
     .select('accessibility_settings')
     .eq('id', userId)
-    .single()
+    .maybeSingle()
   
   if (error) throw error;
   return data?.accessibility_settings || {};
@@ -23,7 +23,7 @@ export const updateAccessibilitySettings = async (userId, settings) => {
     .update({ accessibility_settings: settings })
     .eq('id', userId)
     .select('accessibility_settings')
-    .single()
+    .maybeSingle()
     
   if (error) throw error;
   return data?.accessibility_settings || {};

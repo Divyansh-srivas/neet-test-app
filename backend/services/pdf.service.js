@@ -23,8 +23,16 @@ export const splitPdfIntoChunk = async (filePath, startPage, endPage) => {
 };
 
 export const splitPdfDocIntoChunk = async (pdfDoc, startPage, endPage) => {
+    const totalPages = pdfDoc.getPageCount();
+    const safeStartPage = Math.max(1, startPage);
+    const safeEndPage = Math.min(totalPages, endPage);
+    
+    if (safeStartPage > safeEndPage) {
+        throw new Error(`Invalid page range: ${safeStartPage}-${safeEndPage} (Total pages: ${totalPages})`);
+    }
+
     const chunkPdf = await PDFDocument.create();
-    const pagesToCopy = Array.from({ length: endPage - startPage + 1 }, (_, idx) => startPage + idx - 1);
+    const pagesToCopy = Array.from({ length: safeEndPage - safeStartPage + 1 }, (_, idx) => safeStartPage + idx - 1);
     const copiedPages = await chunkPdf.copyPages(pdfDoc, pagesToCopy);
     copiedPages.forEach((page) => chunkPdf.addPage(page));
     

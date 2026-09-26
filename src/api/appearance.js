@@ -23,7 +23,7 @@ export const getAppearanceSettings = async (userId, uid) => {
         .from('profiles')
         .select('appearance_settings')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (!error && data?.appearance_settings) {
         settings = { ...DEFAULT_SETTINGS, ...data.appearance_settings };
