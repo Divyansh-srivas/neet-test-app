@@ -68,8 +68,12 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
       deleteTest(user?.uid, id)
       setTests(getTests(user?.uid))
       if (user?.uid) {
-        // Also delete from backend so it doesn't re-sync on refresh
-        await supabase.from('tests').delete().eq('id', id).eq('teacher_id', user.uid);
+        try {
+          const { fetchAPI } = await import('../api/apiClient');
+          await fetchAPI(`/api/tests/${id}`, { method: 'DELETE' });
+        } catch (error) {
+          console.error("Failed to delete test from backend:", error);
+        }
       }
     }
   }

@@ -37,14 +37,15 @@ export const createSaveWorker = (io) => {
                     question_text: q.question,
                     options: q.options,
                     correct_option: q.correct,
-                    explanation: q.explanation
+                    explanation: q.explanation,
+                    diagram_url: q.diagramUrl || null
                 });
                 
-                if (q.imageBox) {
+                if (q.imageBox && q.diagramUrl) {
                     extractedImagesCount++;
                     await supabase.from('question_images').insert({
                         question_id: q.id,
-                        image_url: JSON.stringify(q.imageBox),
+                        image_url: q.diagramUrl,
                         page_number: q.imageBox.page
                     });
                 }

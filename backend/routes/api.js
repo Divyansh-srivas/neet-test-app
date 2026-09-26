@@ -10,6 +10,7 @@ import { getProfile, updateProfile } from '../controllers/profileController.js';
 import { getStudyMaterials } from '../controllers/libraryController.js';
 import { getPdfFile } from '../controllers/pdfController.js';
 import { checkSchema } from '../controllers/debugController.js';
+import { deleteTest as deleteTestCtrl } from '../controllers/testsController.js';
 
 const router = express.Router();
 
@@ -39,6 +40,9 @@ router.post('/upload', uploadLimiter, upload.single('file'), uploadPdf);
 router.get('/jobs', getJobs);
 router.get('/jobs/:id', getJobStatus);
 router.delete('/jobs/:id', deleteJob);
+
+// Tests API
+router.delete('/tests/:id', deleteTestCtrl);
 
 // Notes API
 router.get('/notes/:testId', getNotes);
