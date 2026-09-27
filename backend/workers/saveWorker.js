@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import { config } from '../config/env.js';
 
 export const createSaveWorker = (io) => {
-    return new Worker('result-saving-local', async job => {
+    return new Worker('result-saving', async job => {
         const { jobId, userId, token, storagePath, testName, duration, dedupeSourceTestId } = job.data;
         let { questions } = job.data;
         const supabase = supabaseAdmin;

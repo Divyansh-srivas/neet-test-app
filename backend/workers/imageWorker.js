@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import fs from 'fs';
 
 export const createImageWorker = (io) => {
-    return new Worker('image-extraction-local', async job => {
+    return new Worker('image-extraction', async job => {
         const { jobId, userId, filePath, storagePath, token, questions, testName, duration } = job.data;
         const supabase = supabaseAdmin;
         

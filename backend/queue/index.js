@@ -70,11 +70,11 @@ const createQueueSafe = (name) => {
 };
 
 export const queues = {
-    pdfUpload: createQueueSafe('pdf-upload-local'),
-    aiExtraction: createQueueSafe('ai-extraction-local'),
-    imageExtraction: createQueueSafe('image-extraction-local'),
-    questionProcessing: createQueueSafe('question-processing-local'),
-    resultSaving: createQueueSafe('result-saving-local')
+    pdfUpload: createQueueSafe('pdf-upload'),
+    aiExtraction: createQueueSafe('ai-extraction'),
+    imageExtraction: createQueueSafe('image-extraction'),
+    questionProcessing: createQueueSafe('question-processing'),
+    resultSaving: createQueueSafe('result-saving')
 };
 
 logger.info('✅ BullMQ Queues initialized safely');

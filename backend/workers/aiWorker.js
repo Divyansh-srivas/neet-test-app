@@ -7,7 +7,7 @@ import { getTotalPages, splitPdfIntoChunk, releasePdf } from '../services/pdf.se
 import { ensureLocalFile } from '../services/storageSync.js';
 
 export const createAiWorker = (io) => {
-    return new Worker('ai-extraction-local', async job => {
+    return new Worker('ai-extraction', async job => {
         const { jobId, userId, filePath, storagePath, token, testName, duration, language = 'English' } = job.data;
         const supabase = supabaseAdmin;
         

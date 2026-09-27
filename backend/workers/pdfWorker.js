@@ -6,7 +6,7 @@ import { splitPdfIntoChunk, getTotalPages } from '../services/pdf.service.js';
 import { ensureLocalFile } from '../services/storageSync.js';
 
 export const createPdfWorker = (io) => {
-    return new Worker('pdf-upload-local', async job => {
+    return new Worker('pdf-upload', async job => {
         const { uploadId, userId, filePath, storagePath, token, testName, duration } = job.data;
         const supabase = supabaseAdmin;
         
