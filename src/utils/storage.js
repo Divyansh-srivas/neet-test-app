@@ -83,15 +83,15 @@ export const getTests = (uid) => {
 export const saveTest = (uid, test) => {
   if (!uid) return
   const tests = getTests(uid)
-  const idx = tests.findIndex(t => t.id === test.id)
+  const idx = tests.findIndex(t => t && t.id === test.id)
   if (idx >= 0) tests[idx] = test
   else tests.unshift(test)
   storage.set(scopedKey(BASE_KEYS.TESTS, uid), tests)
 }
-export const getTest = (uid, id) => getTests(uid).find(t => t.id === id)
+export const getTest = (uid, id) => getTests(uid).find(t => t && t.id === id)
 export const deleteTest = (uid, id) => {
   if (!uid) return
-  const tests = getTests(uid).filter(t => t.id !== id)
+  const tests = getTests(uid).filter(t => t && t.id !== id)
   storage.set(scopedKey(BASE_KEYS.TESTS, uid), tests)
 }
 
@@ -103,13 +103,13 @@ export const getBookmarks = (uid) => {
 export const toggleBookmark = (uid, question) => {
   if (!uid) return false
   const bm = getBookmarks(uid)
-  const idx = bm.findIndex(b => b.id === question.id)
+  const idx = bm.findIndex(b => b && b.id === question.id)
   if (idx >= 0) bm.splice(idx, 1)
   else bm.unshift({ ...question, savedAt: Date.now() })
   storage.set(scopedKey(BASE_KEYS.BOOKMARKS, uid), bm)
   return idx < 0
 }
-export const isBookmarked = (uid, id) => getBookmarks(uid).some(b => b.id === id)
+export const isBookmarked = (uid, id) => getBookmarks(uid).some(b => b && b.id === id)
 
 export const DEFAULT_SETTINGS = {
   geminiKey: '',
