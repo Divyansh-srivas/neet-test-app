@@ -27,10 +27,12 @@ export async function cropAndUploadDiagram(pdfBuffer, box, testId, qNum) {
     const WHITESPACE_THRESHOLD = 0.001; // row density below this = "pure whitespace"
     // ------------------------
 
+    let doc = null;
+    let page = null;
     try {
         const data = new Uint8Array(pdfBuffer);
-        const doc = await getDocument({ data, disableFontFace: true, standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/' }).promise;
-        const page = await doc.getPage(1);
+        doc = await getDocument({ data, disableFontFace: true, standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/' }).promise;
+        page = await doc.getPage(1);
         const scale = 2.5;
         const viewport = page.getViewport({ scale });
         const canvas = createCanvas(viewport.width, viewport.height);
@@ -230,15 +232,24 @@ export async function cropAndUploadDiagram(pdfBuffer, box, testId, qNum) {
     } catch (e) {
         console.error("cropAndUploadDiagram failed:", e);
         return null;
+    } finally {
+        try {
+            if (page) page.cleanup();
+            if (doc) await doc.destroy();
+        } catch (e) {
+            console.error("Cleanup failed:", e);
+        }
     }
 }
 
 
 export async function uploadSmartFallbackDiagram(pdfBuffer, box, testId, qNum) {
+    let doc = null;
+    let page = null;
     try {
         const data = new Uint8Array(pdfBuffer);
-        const doc = await getDocument({ data, disableFontFace: true, standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/' }).promise;
-        const page = await doc.getPage(1);
+        doc = await getDocument({ data, disableFontFace: true, standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/' }).promise;
+        page = await doc.getPage(1);
         const scale = 2.0; // Slightly lower scale for fallback to save space/bandwidth
         const viewport = page.getViewport({ scale });
         const canvas = createCanvas(viewport.width, viewport.height);
@@ -299,5 +310,12 @@ export async function uploadSmartFallbackDiagram(pdfBuffer, box, testId, qNum) {
     } catch (e) {
         console.error('uploadSmartFallbackDiagram Error:', e);
         return null;
+    } finally {
+        try {
+            if (page) page.cleanup();
+            if (doc) await doc.destroy();
+        } catch (e) {
+            console.error("Cleanup failed:", e);
+        }
     }
 }
