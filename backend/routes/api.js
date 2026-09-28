@@ -36,9 +36,11 @@ router.get('/debug/workers', async (req, res) => {
         return {
             name: w.name,
             isRunning: w.isRunning(),
-            isPaused: w.isPaused, // wait, isPaused is a boolean property or async method? BullMQ 5 has `isPaused` property but it might be async function. It's safe to just omit if uncertain, but let's just get `id` and `closing`.
+            isPaused: w.isPaused,
             closing: w.closing,
-            concurrency: w.opts.concurrency
+            concurrency: w.opts.concurrency,
+            redisStatus: w.client ? await w.client.status : 'no client',
+            hasClient: !!w.client
         };
     }));
     res.json(states);
