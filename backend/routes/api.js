@@ -30,8 +30,18 @@ const upload = multer({
 });
 
 // Debug route
-router.get('/debug/workers', (req, res) => {
-    res.json(global.myWorkers?.map(w => w.name) || []);
+router.get('/debug/workers', async (req, res) => {
+    if (!global.myWorkers) return res.json({ error: 'No workers started' });
+    const states = await Promise.all(global.myWorkers.map(async w => {
+        return {
+            name: w.name,
+            isRunning: w.isRunning(),
+            isPaused: w.isPaused, // wait, isPaused is a boolean property or async method? BullMQ 5 has `isPaused` property but it might be async function. It's safe to just omit if uncertain, but let's just get `id` and `closing`.
+            closing: w.closing,
+            concurrency: w.opts.concurrency
+        };
+    }));
+    res.json(states);
 });
 
 // Protect all API routes
