@@ -61,7 +61,7 @@ app.use(errorHandler);
 
 // Start Workers safely (so Redis connection failures never crash the server)
 try {
-    startAllWorkers(io);
+    global.myWorkers = startAllWorkers(io);
 } catch (err) {
     logger.warn(`⚠️ Background workers skipped: ${err.message}. Running in direct mode.`);
 }

@@ -29,6 +29,11 @@ const upload = multer({
     }
 });
 
+// Debug route
+router.get('/debug/workers', (req, res) => {
+    res.json(global.myWorkers?.map(w => w.name) || []);
+});
+
 // Protect all API routes
 router.use(authenticate);
 router.use(apiLimiter);
