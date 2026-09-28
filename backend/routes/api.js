@@ -51,7 +51,8 @@ router.get('/debug/start-worker', async (req, res) => {
     try {
         const { Worker } = await import('bullmq');
         const { getRedisConnection } = await import('../queue/index.js');
-        const w = new Worker('ai-extraction', async job => {
+        const qName = 'ai-extraction-test-123';
+        const w = new Worker(qName, async job => {
             console.log('MANUAL WORKER PROCESSING', job.id);
             return { message: 'hello from manual worker' };
         }, { connection: getRedisConnection() });
@@ -60,7 +61,7 @@ router.get('/debug/start-worker', async (req, res) => {
         w.on('completed', (job) => console.log('MANUAL COMPLETED', job.id));
         w.on('failed', (job, err) => console.log('MANUAL FAILED', job.id, err.message));
         
-        res.json({ started: true, msg: 'Manual worker started on ai-extraction' });
+        res.json({ started: true, msg: `Manual worker started on ${qName}` });
     } catch (e) {
         res.json({ error: e.message });
     }
