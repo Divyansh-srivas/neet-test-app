@@ -46,6 +46,26 @@ router.get('/debug/workers', async (req, res) => {
     res.json(states);
 });
 
+// Debug start worker
+router.get('/debug/start-worker', async (req, res) => {
+    try {
+        const { Worker } = await import('bullmq');
+        const { getRedisConnection } = await import('../queue/index.js');
+        const w = new Worker('ai-extraction', async job => {
+            console.log('MANUAL WORKER PROCESSING', job.id);
+            return { message: 'hello from manual worker' };
+        }, { connection: getRedisConnection() });
+        
+        w.on('active', (job) => console.log('MANUAL ACTIVE', job.id));
+        w.on('completed', (job) => console.log('MANUAL COMPLETED', job.id));
+        w.on('failed', (job, err) => console.log('MANUAL FAILED', job.id, err.message));
+        
+        res.json({ started: true, msg: 'Manual worker started on ai-extraction' });
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
 // Protect all API routes
 router.use(authenticate);
 router.use(apiLimiter);
