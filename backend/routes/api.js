@@ -39,7 +39,7 @@ router.get('/debug/workers', async (req, res) => {
             isPaused: w.isPaused,
             closing: w.closing,
             concurrency: w.opts.concurrency,
-            redisStatus: w.client ? await w.client.status : 'no client',
+            redisStatus: w.client ? w.client.status : 'no client',
             hasClient: !!w.client
         };
     }));
