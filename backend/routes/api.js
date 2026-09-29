@@ -99,9 +99,10 @@ router.get('/debug/counts', async (req, res) => {
             lastCompleted: lastCompleted.length ? lastCompleted[0] : null,
             lastFailed: lastFailed.length ? { id: lastFailed[0].id, failedReason: lastFailed[0].failedReason } : null
         });
+    } catch (e) {
+        res.json({ error: e.message });
     }
 });
-
 // Protect all API routes
 router.use(authenticate);
 router.use(apiLimiter);
