@@ -77,6 +77,24 @@ router.get('/debug/redis', async (req, res) => {
     });
 });
 
+// Debug Counts
+router.get('/debug/counts', async (req, res) => {
+    try {
+        const { Queue } = await import('bullmq');
+        const { getRedisConnection } = await import('../queue/index.js');
+        const conn = getRedisConnection();
+        const pdfQueue = new Queue('pdf-upload', { connection: conn });
+        const aiQueue = new Queue('ai-extraction', { connection: conn });
+        
+        const pdfCounts = await pdfQueue.getJobCounts();
+        const aiCounts = await aiQueue.getJobCounts();
+        
+        res.json({ pdfCounts, aiCounts });
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
 // Protect all API routes
 router.use(authenticate);
 router.use(apiLimiter);
