@@ -47,62 +47,7 @@ router.get('/debug/workers', async (req, res) => {
 });
 
 // Debug start worker
-router.get('/debug/start-worker', async (req, res) => {
-    try {
-        const { Worker } = await import('bullmq');
-        const { getRedisConnection } = await import('../queue/index.js');
-        const qName = 'ai-extraction-test-123';
-        const w = new Worker(qName, async job => {
-            console.log('MANUAL WORKER PROCESSING', job.id);
-            return { message: 'hello from manual worker' };
-        }, { connection: getRedisConnection() });
-        
-        w.on('active', (job) => console.log('MANUAL ACTIVE', job.id));
-        w.on('completed', (job) => console.log('MANUAL COMPLETED', job.id));
-        w.on('failed', (job, err) => console.log('MANUAL FAILED', job.id, err.message));
-        
-        res.json({ started: true, msg: `Manual worker started on ${qName}` });
-    } catch (e) {
-        res.json({ error: e.message });
-    }
-});
-
-// Debug REDIS
-router.get('/debug/redis', async (req, res) => {
-    const { config } = await import('../config/env.js');
-    res.json({
-        hasRedisUrl: !!config.REDIS_URL,
-        redisUrlEnd: config.REDIS_URL ? config.REDIS_URL.slice(-10) : null,
-        hasUpstash: config.REDIS_URL ? config.REDIS_URL.includes('upstash') : false
-    });
-});
-
-// Debug Counts & Enqueue
-router.get('/debug/counts', async (req, res) => {
-    try {
-        const { Queue } = await import('bullmq');
-        const { getRedisConnection } = await import('../queue/index.js');
-        const conn = getRedisConnection();
-        const aiQueue = new Queue('ai-extraction', { connection: conn });
-        
-        if (req.query.add === 'true') {
-            await aiQueue.add('test', { test: true });
-        }
-        
-        const aiCounts = await aiQueue.getJobCounts();
-        
-        const lastCompleted = await aiQueue.getCompleted(0, 0);
-        const lastFailed = await aiQueue.getFailed(0, 0);
-        
-        res.json({ 
-            aiCounts,
-            lastCompleted: lastCompleted.length ? lastCompleted[0] : null,
-            lastFailed: lastFailed.length ? { id: lastFailed[0].id, failedReason: lastFailed[0].failedReason } : null
-        });
-    } catch (e) {
-        res.json({ error: e.message });
-    }
-});
+// Debug endpoints removed
 // Protect all API routes
 router.use(authenticate);
 router.use(apiLimiter);
