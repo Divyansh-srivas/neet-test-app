@@ -81,7 +81,7 @@ router.get('/debug/redis', async (req, res) => {
 router.get('/debug/counts', async (req, res) => {
     try {
         const fs = await import('fs');
-        const aiWorkerContent = fs.readFileSync('backend/workers/aiWorker.js', 'utf8');
+        const aiWorkerContent = fs.readFileSync('workers/aiWorker.js', 'utf8');
         res.json({ aiWorkerContent });
 
     } catch (e) {
