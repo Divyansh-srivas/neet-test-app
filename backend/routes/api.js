@@ -77,15 +77,28 @@ router.get('/debug/redis', async (req, res) => {
     });
 });
 
-// Debug Counts
+// Debug Counts & Enqueue
 router.get('/debug/counts', async (req, res) => {
     try {
-        const fs = await import('fs');
-        const aiWorkerContent = fs.readFileSync('workers/aiWorker.js', 'utf8');
-        res.json({ aiWorkerContent });
-
-    } catch (e) {
-        res.json({ error: e.message });
+        const { Queue } = await import('bullmq');
+        const { getRedisConnection } = await import('../queue/index.js');
+        const conn = getRedisConnection();
+        const aiQueue = new Queue('ai-extraction', { connection: conn });
+        
+        if (req.query.add === 'true') {
+            await aiQueue.add('test', { test: true });
+        }
+        
+        const aiCounts = await aiQueue.getJobCounts();
+        
+        const lastCompleted = await aiQueue.getCompleted(0, 0);
+        const lastFailed = await aiQueue.getFailed(0, 0);
+        
+        res.json({ 
+            aiCounts,
+            lastCompleted: lastCompleted.length ? lastCompleted[0] : null,
+            lastFailed: lastFailed.length ? { id: lastFailed[0].id, failedReason: lastFailed[0].failedReason } : null
+        });
     }
 });
 
