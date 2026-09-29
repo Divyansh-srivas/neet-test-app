@@ -72,7 +72,11 @@ export const uploadPdf = async (req, res, next) => {
             token,
             testName,
             duration
-        }, { jobId }); // Use custom jobId for tracking
+        }, { 
+            jobId,
+            attempts: 2,
+            backoff: { type: 'fixed', delay: 5000 }
+        }); // Use custom jobId for tracking
 
         res.status(202).json({ success: true, jobId });
     } catch (error) {

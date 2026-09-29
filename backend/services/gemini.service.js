@@ -149,13 +149,16 @@ async function verifyCrop(imageUrl, aiClient, qData) {
         }
         promptText += '\nAnswer EXACTLY in this format:\nVERDICT: [CLEAN or BAD]\nREASON: [If bad, describe the exact text/ghosting seen, or why it does not match]';
         
-        const response = await aiClient.models.generateContent({
-            model: 'gemini-3.5-flash',
-            contents: [{ role: 'user', parts: [
-                { inlineData: { mimeType: 'image/png', data: b64 } },
-                { text: promptText }
-            ]}]
-        });
+        const response = await Promise.race([
+            aiClient.models.generateContent({
+                model: 'gemini-3.5-flash',
+                contents: [{ role: 'user', parts: [
+                    { inlineData: { mimeType: 'image/png', data: b64 } },
+                    { text: promptText }
+                ]}]
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 120000))
+        ]);
         const txt = response.text.trim();
         const verdictMatch = txt.match(/VERDICT:\s*(CLEAN|BAD)/i);
         return verdictMatch && verdictMatch[1].toUpperCase() === 'CLEAN';
@@ -314,20 +317,30 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
 
             logger.info(`[GEMINI NATIVE] Attempt ${attempt}/4 — Calling ${modelName} with PDF inline data...`);
             
-            const response = await ai.models.generateContent({
-                model: modelName,
-                contents: [
-                    { inlineData: { data: base64Pdf, mimeType: 'application/pdf' } },
-                    prompt
-                ],
-                config: {
-                    responseMimeType: 'application/json',
-                    responseSchema: responseSchema,
-                    maxOutputTokens: 16384
-                }
-            }, { signal: abortController.signal });
-            
-            clearTimeout(timeoutId);
+            let response;
+            try {
+                response = await Promise.race([
+                    ai.models.generateContent({
+                        model: modelName,
+                        contents: [
+                            { inlineData: { data: base64Pdf, mimeType: 'application/pdf' } },
+                            prompt
+                        ],
+                        config: {
+                            responseMimeType: 'application/json',
+                            responseSchema: responseSchema,
+                            maxOutputTokens: 16384
+                        }
+                    }),
+                    new Promise((_, reject) => {
+                        const localTimeout = setTimeout(() => reject(new Error('TIMEOUT')), 120000);
+                        // Store it to clear later if needed, but the main block will handle it
+                        // Actually, we can just reject immediately and the catch block catches it
+                    })
+                ]);
+            } finally {
+                clearTimeout(timeoutId);
+            }
 
             if (!response || !response.text) {
                 logger.warn('[GEMINI NATIVE] Empty response from Gemini. Retrying...');
@@ -515,13 +528,16 @@ Options are: ${JSON.stringify(q.options)}.
 Return the bounding box of this diagram within the provided PDF. 
 Respond with ONLY a JSON object in this format: { "page": [1, 2, or 3 relative to this chunk], "box": [ymin, xmin, ymax, xmax] }. If you absolutely cannot find it, return { "box": null }.`;
 
-            const res = await aiClient.models.generateContent({
-                model: 'gemini-3.6-flash',
-                contents: [
-                    { inlineData: { data: b64, mimeType: 'application/pdf' } },
-                    { text: prompt }
-                ]
-            });
+            const res = await Promise.race([
+                aiClient.models.generateContent({
+                    model: 'gemini-3.6-flash',
+                    contents: [
+                        { inlineData: { data: b64, mimeType: 'application/pdf' } },
+                        { text: prompt }
+                    ]
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 120000))
+            ]);
             const txt = res.text.replace(/```/g, '').replace(/json/g, '').trim();
             const parsed = JSON.parse(txt);
             

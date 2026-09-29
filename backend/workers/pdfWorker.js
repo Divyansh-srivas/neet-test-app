@@ -130,6 +130,9 @@ export const createPdfWorker = (io) => {
                 testName,
                 duration,
                 fileHash
+            }, {
+                attempts: 2,
+                backoff: { type: 'fixed', delay: 5000 }
             });
 
         } catch (error) {

@@ -298,6 +298,9 @@ export const createAiWorker = (io) => {
 
             await queues.imageExtraction.add('extract-images', {
                 jobId, userId, filePath, storagePath, token, questions: allExtractedRaw, testName, duration
+            }, {
+                attempts: 2,
+                backoff: { type: 'fixed', delay: 5000 }
             });
 
         } catch (error) {

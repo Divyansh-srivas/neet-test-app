@@ -63,6 +63,9 @@ export const createImageWorker = (io) => {
             // Pass questions along to processor
             await queues.questionProcessing.add('process-questions', {
                 jobId, userId, token, storagePath, questions, testName, duration
+            }, {
+                attempts: 2,
+                backoff: { type: 'fixed', delay: 5000 }
             });
 
         } catch (error) {

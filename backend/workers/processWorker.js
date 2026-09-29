@@ -47,6 +47,9 @@ export const createProcessWorker = (io) => {
 
             await queues.resultSaving.add('save-results', {
                 jobId, userId, token, storagePath, questions: cleanedQuestions, testName, duration
+            }, {
+                attempts: 2,
+                backoff: { type: 'fixed', delay: 5000 }
             });
 
         } catch (error) {
