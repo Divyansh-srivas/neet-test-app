@@ -89,7 +89,15 @@ router.get('/debug/counts', async (req, res) => {
         const pdfCounts = await pdfQueue.getJobCounts();
         const aiCounts = await aiQueue.getJobCounts();
         
-        res.json({ pdfCounts, aiCounts });
+        const lastCompleted = await aiQueue.getCompleted(0, 0);
+        const lastFailed = await aiQueue.getFailed(0, 0);
+        
+        res.json({ 
+            pdfCounts, 
+            aiCounts,
+            lastCompleted: lastCompleted.length ? { id: lastCompleted[0].id, returnvalue: lastCompleted[0].returnvalue } : null,
+            lastFailed: lastFailed.length ? { id: lastFailed[0].id, failedReason: lastFailed[0].failedReason } : null
+        });
     } catch (e) {
         res.json({ error: e.message });
     }
