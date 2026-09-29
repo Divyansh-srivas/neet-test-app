@@ -107,5 +107,11 @@ export const createSaveWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId);
             throw error;
         }
-    }, { connection: getRedisConnection(), concurrency: 2 });
+    }, { 
+        connection: getRedisConnection(),
+        concurrency: 2,
+        lockDuration: 60000,
+        stalledInterval: 60000,
+        maxStalledCount: 1
+    });
 };

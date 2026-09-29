@@ -309,6 +309,10 @@ export const createAiWorker = (io) => {
             releasePdf(filePath);
         }
     }, { 
-        connection: getRedisConnection()
+        connection: getRedisConnection(),
+        concurrency: 1,
+        lockDuration: 120000,
+        stalledInterval: 60000,
+        maxStalledCount: 1
     });
 };

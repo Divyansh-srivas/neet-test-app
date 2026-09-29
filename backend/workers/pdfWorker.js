@@ -138,5 +138,11 @@ export const createPdfWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', job.id);
             throw error;
         }
-    }, { connection: getRedisConnection() });
+    }, { 
+        connection: getRedisConnection(),
+        concurrency: 1,
+        lockDuration: 120000,
+        stalledInterval: 60000,
+        maxStalledCount: 1
+    });
 };

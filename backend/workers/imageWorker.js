@@ -71,5 +71,11 @@ export const createImageWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId);
             throw error;
         }
-    }, { connection: getRedisConnection(), concurrency: 2 });
+    }, { 
+        connection: getRedisConnection(),
+        concurrency: 2,
+        lockDuration: 120000,
+        stalledInterval: 60000,
+        maxStalledCount: 1
+    });
 };

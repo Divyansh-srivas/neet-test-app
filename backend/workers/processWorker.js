@@ -55,5 +55,11 @@ export const createProcessWorker = (io) => {
             await supabase.from('jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId);
             throw error;
         }
-    }, { connection: getRedisConnection(), concurrency: 4 });
+    }, { 
+        connection: getRedisConnection(),
+        concurrency: 4,
+        lockDuration: 60000,
+        stalledInterval: 60000,
+        maxStalledCount: 1
+    });
 };
