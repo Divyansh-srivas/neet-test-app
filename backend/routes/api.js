@@ -67,6 +67,16 @@ router.get('/debug/start-worker', async (req, res) => {
     }
 });
 
+// Debug REDIS
+router.get('/debug/redis', async (req, res) => {
+    const { config } = await import('../config/env.js');
+    res.json({
+        hasRedisUrl: !!config.REDIS_URL,
+        redisUrlEnd: config.REDIS_URL ? config.REDIS_URL.slice(-10) : null,
+        hasUpstash: config.REDIS_URL ? config.REDIS_URL.includes('upstash') : false
+    });
+});
+
 // Protect all API routes
 router.use(authenticate);
 router.use(apiLimiter);
