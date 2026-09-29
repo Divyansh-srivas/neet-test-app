@@ -293,19 +293,22 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                 const { getRedisConnection } = await import('../queue/index.js');
                 const redis = getRedisConnection();
                 if (redis) {
-                    const minuteKey = `ratelimit:gemini:${Math.floor(Date.now() / 60000)}`;
-                    const reqCount = await redis.incr(minuteKey);
-                    if (reqCount === 1) await redis.expire(minuteKey, 120);
-                    if (reqCount > 12) {
-                        logger.warn(`[GEMINI NATIVE] Rate limit reached (${reqCount}/12). Waiting 10s...`);
-                        await delay(10000); // Wait 10 seconds and try again (will fail this attempt, or just loop)
-                        // Actually, just wait here without throwing, then proceed
-                        // Wait, it's safer to just throw and let the retry loop handle it
-                        throw new Error("429 Too Many Requests: Global Rate Limit Exceeded");
+                    let allowed = false;
+                    while (!allowed) {
+                        const minuteKey = `ratelimit:gemini:${Math.floor(Date.now() / 60000)}`;
+                        const reqCount = await redis.incr(minuteKey);
+                        if (reqCount === 1) await redis.expire(minuteKey, 120);
+                        
+                        if (reqCount > 12) {
+                            logger.warn(`[GEMINI NATIVE] Rate limit reached (${reqCount}/12). Waiting 10s before retry...`);
+                            await delay(10000);
+                            // Do not throw, just loop and try again in the new/current minute
+                        } else {
+                            allowed = true;
+                        }
                     }
                 }
             } catch (rlErr) {
-                if (rlErr.message.includes("Rate Limit Exceeded")) throw rlErr;
                 logger.warn(`[GEMINI NATIVE] Rate limiter check failed, ignoring: ${rlErr.message}`);
             }
 
@@ -473,6 +476,9 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                 const retryMatch = errStr.match(/retry in (\d+(\.\d+)?)s/i);
                 if (retryMatch && retryMatch[1]) {
                     delayMs = Math.max(delayMs, parseFloat(retryMatch[1]) * 1000 + 1000);
+                } else if (errStr.includes('429')) {
+                    // Force a 30s wait on 429 Quota Exceeded if no retry-after is provided
+                    delayMs = Math.max(delayMs, 30000);
                 }
                 logger.warn(`[GEMINI NATIVE] Retrying in ${delayMs/1000}s...`);
                 await delay(delayMs);
