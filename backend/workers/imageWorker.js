@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { getRedisConnection, queues } from '../queue/index.js';
+import { getRedisConnection, queues, getBullOptions } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import fs from 'fs';
@@ -75,7 +75,7 @@ export const createImageWorker = (io) => {
             throw error;
         }
     }, { 
-        connection: getRedisConnection(),
+        ...getBullOptions(),
         concurrency: 2,
         lockDuration: 120000,
         stalledInterval: 60000,

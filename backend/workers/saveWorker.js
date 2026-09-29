@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { getRedisConnection } from '../queue/index.js';
+import { getRedisConnection, getBullOptions } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { config } from '../config/env.js';
@@ -108,7 +108,7 @@ export const createSaveWorker = (io) => {
             throw error;
         }
     }, { 
-        connection: getRedisConnection(),
+        ...getBullOptions(),
         concurrency: 2,
         lockDuration: 60000,
         stalledInterval: 60000,

@@ -57,12 +57,23 @@ export const getRedisConnection = () => {
 // Backwards compatibility export
 export const connection = getRedisConnection();
 
+export const getBullOptions = () => {
+    const conn = getRedisConnection();
+    if (!conn) return null;
+    // Prefix 'local' in dev to prevent polluting production Redis
+    const isProd = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+    return { 
+        connection: conn, 
+        prefix: isProd ? 'bull' : 'local' 
+    };
+};
+
 // Define Pipeline Queues safely
 const createQueueSafe = (name) => {
     try {
-        const conn = getRedisConnection();
-        if (!conn) return null;
-        return new Queue(name, { connection: conn });
+        const opts = getBullOptions();
+        if (!opts) return null;
+        return new Queue(name, opts);
     } catch (err) {
         logger.warn(`⚠️ Queue '${name}' creation skipped: ${err.message}`);
         return null;

@@ -21,6 +21,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // Initialize WebSockets

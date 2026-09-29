@@ -356,9 +356,8 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
             // Usage Logging (A1)
             try {
                 const usage = response.usageMetadata || {};
-                const { createClient } = await import('@supabase/supabase-js');
-                const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-                await sb.from('gemini_usage').insert({
+                const { supabaseAdmin } = await import('../config/supabase.js');
+                await supabaseAdmin.from('gemini_usage').insert({
                     model: modelName,
                     prompt_tokens: usage.promptTokenCount || 0,
                     candidates_tokens: usage.candidatesTokenCount || 0,

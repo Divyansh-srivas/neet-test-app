@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { getRedisConnection, queues } from '../queue/index.js';
+import { getRedisConnection, queues, getBullOptions } from '../queue/index.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { splitPdfIntoChunk, getTotalPages } from '../services/pdf.service.js';
@@ -142,7 +142,7 @@ export const createPdfWorker = (io) => {
             throw error;
         }
     }, { 
-        connection: getRedisConnection(),
+        ...getBullOptions(),
         concurrency: 1,
         lockDuration: 120000,
         stalledInterval: 60000,
