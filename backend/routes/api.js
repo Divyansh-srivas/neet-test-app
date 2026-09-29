@@ -95,7 +95,7 @@ router.get('/debug/counts', async (req, res) => {
         res.json({ 
             pdfCounts, 
             aiCounts,
-            lastCompleted: lastCompleted.length ? { id: lastCompleted[0].id, returnvalue: lastCompleted[0].returnvalue } : null,
+            lastCompleted: lastCompleted.length ? lastCompleted[0] : null,
             lastFailed: lastFailed.length ? { id: lastFailed[0].id, failedReason: lastFailed[0].failedReason } : null
         });
     } catch (e) {
