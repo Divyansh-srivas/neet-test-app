@@ -46,6 +46,28 @@ router.get('/debug/workers', async (req, res) => {
     res.json(states);
 });
 
+// Debug endpoint to prove deployment
+router.get('/debug/deploy', (req, res) => {
+    try {
+        import('child_process').then(cp => {
+            const hash = cp.execSync('git rev-parse HEAD').toString().trim();
+            let grepPass2 = "";
+            try {
+                grepPass2 = cp.execSync('grep -n "performPass2Hunt" services/gemini.service.js').toString();
+            } catch (e) {
+                grepPass2 = "No results found (grep failed/empty)";
+            }
+            res.json({
+                commit: hash,
+                pass2Grep: grepPass2,
+                timestamp: new Date().toISOString()
+            });
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Debug start worker
 // Debug endpoints removed
 // Protect all API routes
