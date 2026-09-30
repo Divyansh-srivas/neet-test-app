@@ -10,46 +10,69 @@ import { createCanvas } from '@napi-rs/canvas';
 export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
     const uint8Array = new Uint8Array(pdfBuffer);
     
-    // Load PDF
-    const loadingTask = getDocument({
-        data: uint8Array,
-        useSystemFonts: true,
-        disableFontFace: true
-    });
+    let pdfDocument = null;
+    let page = null;
     
-    const pdfDocument = await loadingTask.promise;
-    const page = await pdfDocument.getPage(1);
-    
-    // Get viewport at 150 DPI (approx scale 2.0)
-    const scale = 2.0;
-    const viewport = page.getViewport({ scale });
-    
-    // Calculate pixel coordinates from normalized 0-1000 coordinates
-    const top = (bbox.ymin / 1000) * viewport.height;
-    const left = (bbox.xmin / 1000) * viewport.width;
-    const bottom = (bbox.ymax / 1000) * viewport.height;
-    const right = (bbox.xmax / 1000) * viewport.width;
-    
-    const width = right - left;
-    const height = bottom - top;
-    
-    // Create a canvas exactly the size of the crop region
-    const canvas = createCanvas(Math.round(width), Math.round(height));
-    const context = canvas.getContext('2d');
-    
-    // Create a rendering context where we transform the context so that 
-    // the target region is drawn at (0, 0)
-    context.translate(-left, -top);
-    
-    const renderContext = {
-        canvasContext: context,
-        viewport: viewport
-    };
-    
-    await page.render(renderContext).promise;
-    
-    // Encode to PNG buffer
-    return await canvas.encode('png');
+    try {
+        // Load PDF
+        const loadingTask = getDocument({
+            data: uint8Array,
+            useSystemFonts: true,
+            disableFontFace: true
+        });
+        
+        pdfDocument = await loadingTask.promise;
+        page = await pdfDocument.getPage(1);
+        
+        // Get viewport at 150 DPI (approx scale 2.0)
+        const scale = 2.0;
+        const viewport = page.getViewport({ scale });
+        
+        // Calculate pixel coordinates from normalized 0-1000 coordinates
+        const top = (bbox.ymin / 1000) * viewport.height;
+        const left = (bbox.xmin / 1000) * viewport.width;
+        const bottom = (bbox.ymax / 1000) * viewport.height;
+        const right = (bbox.xmax / 1000) * viewport.width;
+        
+        const width = right - left;
+        const height = bottom - top;
+        
+        // Create a canvas exactly the size of the crop region
+        const canvas = createCanvas(Math.round(width), Math.round(height));
+        const context = canvas.getContext('2d');
+        
+        // Create a rendering context where we transform the context so that 
+        // the target region is drawn at (0, 0)
+        context.translate(-left, -top);
+        
+        const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+        };
+        
+        const renderTask = page.render(renderContext);
+        
+        // Wrap render promise with a timeout to prevent native hang
+        await Promise.race([
+            renderTask.promise,
+            new Promise((_, reject) => setTimeout(() => {
+                try { renderTask.cancel(); } catch (e) {}
+                reject(new Error('PDF render timed out after 15 seconds'));
+            }, 15000))
+        ]);
+        
+        // Encode to PNG buffer
+        return await canvas.encode('png');
+    } catch (e) {
+        throw new Error(`PDF render failed in cropPdfRegionToImage: ${e.message}`);
+    } finally {
+        try {
+            if (page) page.cleanup();
+            if (pdfDocument) await pdfDocument.destroy();
+        } catch (cleanupErr) {
+            // Ignore cleanup errors
+        }
+    }
 };
 
 /**
@@ -62,51 +85,74 @@ export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
 export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) => {
     const uint8Array = new Uint8Array(pdfBuffer);
     
-    // Load PDF
-    const loadingTask = getDocument({
-        data: uint8Array,
-        useSystemFonts: true,
-        disableFontFace: true
-    });
+    let pdfDocument = null;
+    let page = null;
     
-    const pdfDocument = await loadingTask.promise;
-    const page = await pdfDocument.getPage(pageNum);
-    
-    // Get viewport at 150 DPI (approx scale 2.0)
-    const scale = 2.0;
-    const viewport = page.getViewport({ scale });
-    
-    // Handle both array and object formats for bbox
-    let ymin, xmin, ymax, xmax;
-    if (Array.isArray(bbox) && bbox.length === 4) {
-        [ymin, xmin, ymax, xmax] = bbox;
-    } else {
-        ({ ymin, xmin, ymax, xmax } = bbox);
-    }
+    try {
+        // Load PDF
+        const loadingTask = getDocument({
+            data: uint8Array,
+            useSystemFonts: true,
+            disableFontFace: true
+        });
+        
+        pdfDocument = await loadingTask.promise;
+        page = await pdfDocument.getPage(pageNum);
+        
+        // Get viewport at 150 DPI (approx scale 2.0)
+        const scale = 2.0;
+        const viewport = page.getViewport({ scale });
+        
+        // Handle both array and object formats for bbox
+        let ymin, xmin, ymax, xmax;
+        if (Array.isArray(bbox) && bbox.length === 4) {
+            [ymin, xmin, ymax, xmax] = bbox;
+        } else {
+            ({ ymin, xmin, ymax, xmax } = bbox);
+        }
 
-    // Calculate pixel coordinates from normalized 0-1000 coordinates
-    const top = (ymin / 1000) * viewport.height;
-    const left = (xmin / 1000) * viewport.width;
-    const bottom = (ymax / 1000) * viewport.height;
-    const right = (xmax / 1000) * viewport.width;
-    
-    const width = right - left;
-    const height = bottom - top;
-    
-    // Create a canvas exactly the size of the crop region
-    const canvas = createCanvas(Math.round(width), Math.round(height));
-    const context = canvas.getContext('2d');
-    
-    // Create a rendering context where we transform the context so that 
-    // the target region is drawn at (0, 0)
-    context.translate(-left, -top);
-    
-    const renderContext = {
-        canvasContext: context,
-        viewport: viewport
-    };
-    
-    await page.render(renderContext).promise;
-    
-    return await canvas.encode('png');
+        // Calculate pixel coordinates from normalized 0-1000 coordinates
+        const top = (ymin / 1000) * viewport.height;
+        const left = (xmin / 1000) * viewport.width;
+        const bottom = (ymax / 1000) * viewport.height;
+        const right = (xmax / 1000) * viewport.width;
+        
+        const width = right - left;
+        const height = bottom - top;
+        
+        // Create a canvas exactly the size of the crop region
+        const canvas = createCanvas(Math.round(width), Math.round(height));
+        const context = canvas.getContext('2d');
+        
+        // Create a rendering context where we transform the context so that 
+        // the target region is drawn at (0, 0)
+        context.translate(-left, -top);
+        
+        const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+        };
+        
+        const renderTask = page.render(renderContext);
+        
+        // Wrap render promise with a timeout to prevent native hang
+        await Promise.race([
+            renderTask.promise,
+            new Promise((_, reject) => setTimeout(() => {
+                try { renderTask.cancel(); } catch (e) {}
+                reject(new Error('PDF render timed out after 15 seconds'));
+            }, 15000))
+        ]);
+        
+        return await canvas.encode('png');
+    } catch (e) {
+        throw new Error(`PDF render failed in cropMultiPagePdfRegionToImage: ${e.message}`);
+    } finally {
+        try {
+            if (page) page.cleanup();
+            if (pdfDocument) await pdfDocument.destroy();
+        } catch (cleanupErr) {
+            // Ignore cleanup errors
+        }
+    }
 };

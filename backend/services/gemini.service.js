@@ -425,9 +425,10 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
             }
             const normalized = normalizeQuestions(safeParsedRaw);
 
-            // Post-process all image boxes: PASS 2 VISUAL HUNT
+            // Post-process all image boxes: PASS 2 VISUAL HUNT (DISABLED by user request)
             for (const q of normalized) {
                 if (q.hasDiagram) {
+                    /* PASS 2 HUNT DISABLED 
                     try {
                         let finalUrl = null;
                         
@@ -455,6 +456,7 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                             q.hasDiagram = false;
                         }
                     }
+                    */
                 }
             }
 

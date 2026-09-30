@@ -40,7 +40,14 @@ export async function cropAndUploadDiagram(pdfBuffer, box, testId, qNum) {
         
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        const renderTask = page.render({ canvasContext: ctx, viewport });
+        await Promise.race([
+            renderTask.promise,
+            new Promise((_, reject) => setTimeout(() => {
+                try { renderTask.cancel(); } catch(e) {}
+                reject(new Error('PDF render timed out after 15 seconds'));
+            }, 15000))
+        ]);
         
         const isScale1 = ymax <= 1 && xmax <= 1;
         const scaleDivisor = isScale1 ? 1 : 1000;
@@ -257,7 +264,14 @@ export async function uploadSmartFallbackDiagram(pdfBuffer, box, testId, qNum) {
         
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        const renderTask = page.render({ canvasContext: ctx, viewport });
+        await Promise.race([
+            renderTask.promise,
+            new Promise((_, reject) => setTimeout(() => {
+                try { renderTask.cancel(); } catch(e) {}
+                reject(new Error('PDF render timed out after 15 seconds'));
+            }, 15000))
+        ]);
 
         let [ymin, xmin, ymax, xmax] = [0, 0, 1, 1];
         if (box && box.length === 4) {
