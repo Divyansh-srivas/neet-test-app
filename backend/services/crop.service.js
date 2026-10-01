@@ -1,6 +1,9 @@
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.js';
 import { createCanvas } from '@napi-rs/canvas';
 
+const leakedCanvases = [];
+const leakedDocs = [];
+
 /**
  * Renders a specific region of a 1-page PDF to a PNG buffer.
  * @param {Buffer} pdfBuffer - The single-page PDF buffer
@@ -12,6 +15,7 @@ export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
     
     let pdfDocument = null;
     let page = null;
+    let timeoutFired = false;
     
     try {
         // Load PDF
@@ -52,18 +56,29 @@ export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
         
         const renderTask = page.render(renderContext);
         
-        await renderTask.promise;
+        await Promise.race([
+            renderTask.promise,
+            new Promise((_, reject) => setTimeout(() => {
+                timeoutFired = true;
+                leakedCanvases.push(canvas);
+                leakedDocs.push({ pdfDocument, page });
+                try { renderTask.cancel(); } catch (e) {}
+                reject(new Error('PDF render timed out after 15 seconds'));
+            }, 15000))
+        ]);
         
         // Encode to PNG buffer
         return await canvas.encode('png');
     } catch (e) {
         throw new Error(`PDF render failed in cropPdfRegionToImage: ${e.message}`);
     } finally {
-        try {
-            if (page) page.cleanup();
-            if (pdfDocument) await pdfDocument.destroy();
-        } catch (cleanupErr) {
-            // Ignore cleanup errors
+        if (!timeoutFired) {
+            try {
+                if (page) page.cleanup();
+                if (pdfDocument) await pdfDocument.destroy();
+            } catch (cleanupErr) {
+                // Ignore cleanup errors
+            }
         }
     }
 };
@@ -80,6 +95,7 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
     
     let pdfDocument = null;
     let page = null;
+    let timeoutFired = false;
     
     try {
         // Load PDF
@@ -128,17 +144,28 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
         
         const renderTask = page.render(renderContext);
         
-        await renderTask.promise;
+        await Promise.race([
+            renderTask.promise,
+            new Promise((_, reject) => setTimeout(() => {
+                timeoutFired = true;
+                leakedCanvases.push(canvas);
+                leakedDocs.push({ pdfDocument, page });
+                try { renderTask.cancel(); } catch (e) {}
+                reject(new Error('PDF render timed out after 15 seconds'));
+            }, 15000))
+        ]);
         
         return await canvas.encode('png');
     } catch (e) {
         throw new Error(`PDF render failed in cropMultiPagePdfRegionToImage: ${e.message}`);
     } finally {
-        try {
-            if (page) page.cleanup();
-            if (pdfDocument) await pdfDocument.destroy();
-        } catch (cleanupErr) {
-            // Ignore cleanup errors
+        if (!timeoutFired) {
+            try {
+                if (page) page.cleanup();
+                if (pdfDocument) await pdfDocument.destroy();
+            } catch (cleanupErr) {
+                // Ignore cleanup errors
+            }
         }
     }
 };
