@@ -18,18 +18,23 @@ export default async function (job) {
         }
 
         if (pdfBuffer) {
-            const { cropMultiPagePdfRegionToImage } = await import('../services/crop.service.js');
+            const { createPdfImageProcessor } = await import('../services/crop.service.js');
             
             let processedImages = 0;
+            let processor = null;
             
-            for (const q of questions) {
-                if (q && q.imageBox && q.imageBox.page) {
-                    try {
-                        const pageNum = q.imageBox.page; 
-                        const bbox = q.imageBox.box;     
-                        
-                        logger.info(`[imageProcessor] Cropping diagram for qNum=${q.qNum} on page=${pageNum}`);
-                        const croppedImageBuffer = await cropMultiPagePdfRegionToImage(pdfBuffer, pageNum, bbox);
+            try {
+                logger.info(`[imageProcessor] Initializing PDF image processor (this takes a few seconds)...`);
+                processor = await createPdfImageProcessor(pdfBuffer);
+                
+                for (const q of questions) {
+                    if (q && q.imageBox && q.imageBox.page) {
+                        try {
+                            const pageNum = q.imageBox.page; 
+                            const bbox = q.imageBox.box;     
+                            
+                            logger.info(`[imageProcessor] Cropping diagram for qNum=${q.qNum} on page=${pageNum}`);
+                            const croppedImageBuffer = await processor.cropRegion(pageNum, bbox);
                         
                         const fileName = `diagrams/${jobId}_p${pageNum}_q${q.qNum}_${Date.now()}.png`;
                         
@@ -53,7 +58,15 @@ export default async function (job) {
                 }
             }
             logger.info(`[imageProcessor] Cropped and uploaded ${processedImages} diagrams for job ${jobId}`);
+            
+            if (processor) {
+                await processor.cleanup();
+            }
+        } catch (procErr) {
+            logger.error(`[imageProcessor] PDF initialization or fatal error: ${procErr.message}`);
+            if (processor) await processor.cleanup();
         }
+    }
         
         await queues.questionProcessing.add('process-questions', {
             jobId, userId, token, storagePath, questions, testName, duration
