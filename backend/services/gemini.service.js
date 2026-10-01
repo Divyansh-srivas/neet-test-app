@@ -425,38 +425,10 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
             }
             const normalized = normalizeQuestions(safeParsedRaw);
 
-            // Post-process all image boxes: PASS 2 VISUAL HUNT (DISABLED by user request)
+            // Post-process all image boxes: PASS 2 VISUAL HUNT (REMOVED by user request)
             for (const q of normalized) {
                 if (q.hasDiagram) {
-                    /* PASS 2 HUNT DISABLED 
-                    try {
-                        let finalUrl = null;
-                        
-                        // Only perform the hunt if we have the context args
-                        if (filePath && startPage && endPage) {
-                            finalUrl = await performPass2Hunt(q, filePath, startPage, endPage, testId, ai);
-                        } else {
-                            logger.warn(`[GEMINI NATIVE] Missing context args for Pass 2 Hunt on Q${q.questionNumber || q.qNum}. Diagram will be skipped.`);
-                        }
-                        
-                        if (finalUrl) {
-                            q.imageUrl = finalUrl;
-                            q.imageBox = null;
-                        } else {
-                            if (q.imageBox) {
-                                logger.warn(`[GEMINI NATIVE] Pass 2 Hunt failed to verify diagram for Q${q.questionNumber || q.qNum}. Falling back to Pass 1 imageBox.`);
-                            } else {
-                                logger.warn(`[GEMINI NATIVE] Pass 2 Hunt failed and no Pass 1 imageBox for Q${q.questionNumber || q.qNum}. Setting NO image.`);
-                                q.hasDiagram = false;
-                            }
-                        }
-                    } catch (e) {
-                        logger.error(`[GEMINI NATIVE] Pass 2 Hunt threw error for Q${q.questionNumber || q.qNum}: ${e.message}`);
-                        if (!q.imageBox) {
-                            q.hasDiagram = false;
-                        }
-                    }
-                    */
+                    // Pass 2 Hunt logic removed entirely to prevent grep confusion and guarantee it is disabled.
                 }
             }
 
