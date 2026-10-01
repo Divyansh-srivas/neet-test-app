@@ -52,14 +52,7 @@ export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
         
         const renderTask = page.render(renderContext);
         
-        // Wrap render promise with a timeout to prevent native hang
-        await Promise.race([
-            renderTask.promise,
-            new Promise((_, reject) => setTimeout(() => {
-                try { renderTask.cancel(); } catch (e) {}
-                reject(new Error('PDF render timed out after 15 seconds'));
-            }, 15000))
-        ]);
+        await renderTask.promise;
         
         // Encode to PNG buffer
         return await canvas.encode('png');
@@ -135,14 +128,7 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
         
         const renderTask = page.render(renderContext);
         
-        // Wrap render promise with a timeout to prevent native hang
-        await Promise.race([
-            renderTask.promise,
-            new Promise((_, reject) => setTimeout(() => {
-                try { renderTask.cancel(); } catch (e) {}
-                reject(new Error('PDF render timed out after 15 seconds'));
-            }, 15000))
-        ]);
+        await renderTask.promise;
         
         return await canvas.encode('png');
     } catch (e) {
