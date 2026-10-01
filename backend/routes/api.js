@@ -48,6 +48,9 @@ router.get('/debug/workers', async (req, res) => {
 
 // Debug endpoint to prove deployment
 router.get('/debug/deploy', (req, res) => {
+    if (req.query.secret !== 'neogravix_verify') {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
     try {
         import('child_process').then(cp => {
             const hash = cp.execSync('git rev-parse HEAD').toString().trim();
