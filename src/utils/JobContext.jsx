@@ -47,7 +47,10 @@ export function JobProvider({ children }) {
 
     const mergeJob = (prevJobs, jobId, patch) => {
       const old = prevJobs[jobId] || {};
-      const newProgress = Math.max(old.progress || 0, patch.progress ?? 0);
+      // Only use Math.max if this is the SAME job progressing forward
+      // If job status is resetting (new upload), allow progress to go back to 0
+      const isNewStatusReset = patch.status === 'queued' || patch.status === 'uploading';
+      const newProgress = isNewStatusReset ? (patch.progress ?? 0) : Math.max(old.progress || 0, patch.progress ?? 0);
       return {
           ...prevJobs,
           [jobId]: { ...old, ...patch, progress: newProgress }
@@ -142,8 +145,18 @@ export function JobProvider({ children }) {
       if (data.jobs) {
           setActiveJobs(prev => {
               const updated = { ...prev };
+              const now = Date.now();
               data.jobs.forEach(job => {
-                  if (job.status === 'processing' || job.status === 'queued') {
+                  const jobAgeMs = now - new Date(job.created_at || 0).getTime();
+                  const isStale = job.status === 'processing' && jobAgeMs > 30 * 60 * 1000; // >30 min old
+                  
+                  if (isStale) {
+                      // Auto-mark stale processing jobs as failed in UI so they don't block new uploads
+                      updated[job.id] = {
+                          status: 'failed',
+                          error: 'Job timed out (server may have restarted). Please try uploading again.'
+                      };
+                  } else if (job.status === 'processing' || job.status === 'queued') {
                       const newProgress = Math.max(updated[job.id]?.progress || 0, job.progress || 0);
                       updated[job.id] = {
                           status: job.status,
