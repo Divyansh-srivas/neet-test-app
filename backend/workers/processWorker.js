@@ -41,7 +41,11 @@ export const createProcessWorker = (io) => {
                     correct: (q.correct || q.correctAnswer || 'A').toString().toUpperCase().trim(),
                     explanation: q.explanation || null,
                     imageBox: q.imageBox || null,
-                    hasDiagram: q.hasDiagram || !!q.imageBox
+                    hasDiagram: q.hasDiagram || !!q.imageBox,
+                    diagramUrl: q.diagramUrl || null,
+                    hasVisualOptions: q.hasVisualOptions || false,
+                    optionImageBoxes: q.optionImageBoxes || null,
+                    optionImageUrls: q.optionImageUrls || null
                 };
             }).filter(q => q.question.length > 0);
 

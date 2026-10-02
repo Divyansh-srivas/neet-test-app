@@ -239,6 +239,15 @@ export const createAiWorker = (io) => {
                         q.imageBox.page = startPage + q.imageBox.page - 1;
                         logger.info(`[aiWorker] job=${jobId} qNum=${q.questionNumber || q.qNum} mapped diagram to absolute page=${q.imageBox.page} box=[${q.imageBox.box}]`);
                     }
+                    // Map optionImageBoxes to absolute page numbers
+                    if (q && q.optionImageBoxes && typeof q.optionImageBoxes === 'object') {
+                        for (const [optKey, optBox] of Object.entries(q.optionImageBoxes)) {
+                            if (optBox && typeof optBox.page === 'number') {
+                                q.optionImageBoxes[optKey].page = startPage + optBox.page - 1;
+                            }
+                        }
+                        logger.info(`[aiWorker] job=${jobId} qNum=${q.questionNumber || q.qNum} mapped optionImageBoxes to absolute pages`);
+                    }
                     return repairQuestion(q);
                 });
 
