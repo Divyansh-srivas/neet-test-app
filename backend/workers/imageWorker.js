@@ -15,11 +15,11 @@ export const createImageWorker = (io) => {
 
     const worker = new Worker('image-extraction', cleanPath, { 
         ...getBullOptions(),
-        concurrency: 2,
+        concurrency: 1, // MUST BE 1 to prevent native @napi-rs/canvas crash across threads
         lockDuration: 120000,
         stalledInterval: 60000,
         maxStalledCount: 1,
-        useWorkerThreads: false // explicitly use separate processes, not threads, to fully isolate native crashes
+        useWorkerThreads: false
     });
     
     worker.on('progress', (job, progress) => {
@@ -32,8 +32,19 @@ export const createImageWorker = (io) => {
         }
     });
     
-    worker.on('failed', (job, err) => {
+    worker.on('failed', async (job, err) => {
         logger.error(`[imageWorker] Job ${job?.id} failed natively or via JS: ${err.message}`);
+        
+        // CRITICAL: Ensure Supabase knows the job failed so it doesn't get stuck at 75% forever
+        if (job && job.data && job.data.jobId) {
+            try {
+                await supabaseAdmin.from('jobs').update({ 
+                    status: 'failed', 
+                    error_message: 'Image extraction crashed natively: ' + err.message 
+                }).eq('id', job.data.jobId);
+            } catch (dbErr) {}
+        }
+
         if (job && job.data && job.data.userId) {
             io.to(job.data.userId).emit('job-failed', { 
                 jobId: job.data.jobId, 
