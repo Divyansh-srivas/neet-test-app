@@ -87,6 +87,7 @@ export function normalizeQuestions(rawQuestions) {
 
         const correctAnswer = (q.correctAnswer || q.correct || q.answer || 'A').toString().toUpperCase().trim();
         const hasDiagram = !!(q.hasDiagram || q.diagramBox || q.imageBox || q.diagramUrl);
+        const hasVisualOptions = !!(q.hasVisualOptions || q.optionImageBoxes);
 
         let imageBox = q.imageBox || null;
         if (typeof imageBox === 'string') {
@@ -111,6 +112,22 @@ export function normalizeQuestions(rawQuestions) {
             };
         }
 
+        // Normalize optionImageBoxes - each value can be {page, box} or raw array
+        let optionImageBoxes = null;
+        if (q.optionImageBoxes && typeof q.optionImageBoxes === 'object') {
+            optionImageBoxes = {};
+            for (const [key, val] of Object.entries(q.optionImageBoxes)) {
+                if (!val) continue;
+                const upperKey = key.toUpperCase();
+                if (val.box && Array.isArray(val.box)) {
+                    optionImageBoxes[upperKey] = { page: val.page || 1, box: val.box };
+                } else if (Array.isArray(val) && val.length === 4) {
+                    optionImageBoxes[upperKey] = { page: 1, box: val };
+                }
+            }
+            if (Object.keys(optionImageBoxes).length === 0) optionImageBoxes = null;
+        }
+
         return {
             questionNumber: qNum,
             qNum: qNum,
@@ -121,9 +138,12 @@ export function normalizeQuestions(rawQuestions) {
             correctAnswer: correctAnswer,
             correct: correctAnswer,
             hasDiagram: hasDiagram,
+            hasVisualOptions: hasVisualOptions,
             diagramBox: q.diagramBox || imageBox || null,
             diagramUrl: q.diagramUrl || q.image || null,
             imageBox: imageBox,
+            optionImageBoxes: optionImageBoxes,
+            optionImageUrls: q.optionImageUrls || null,
             explanation: q.explanation || null,
             subject: q.subject || 'Physics',
             chapter: q.chapter || 'Uncategorized',
@@ -198,14 +218,28 @@ ${languageRule}
    - WRONG:   "Column I | Column II\n:---|:---\nMitochondria | Powerhouse"   (pipe/markdown FORBIDDEN)
 6. DIAGRAMS & FIGURES: Only set 'imageBox' when the question contains an actual VISUAL element: photograph, drawn diagram, anatomical figure, graph/chart, chemical structure, or circuit diagram.
    - CRITICAL BOUNDING BOX RULE: Your imageBox must capture EXACTLY the figure content needed to answer the question — nothing less, nothing more.
-     * INCLUDE: the diagram/graph/circuit/chemical structure/table itself, all its internal labels, axis values, numbers, component values. 
-     * INCLUDE VISUAL OPTIONS: If the answer options themselves are visual (e.g., 4 small graphs, 4 small diagrams labeled (1)-(4)), you MUST include ALL of those option-graphs as part of the SAME imageBox. Stretch the ymax downwards to encompass them.
-     * EXCLUDE (CRITICAL): The question's own stem text repeated above the figure, answer options that are plain text/formulas, headers, footers, institute names, date stamps, "Space for Rough Work", and anything from adjacent questions.
-     * DO NOT let the bounding box touch ANY text that is part of the question itself (e.g. "Water flows through a frictionless duct...", "In given LCR circuit..."). Start the box strictly AT the first visual pixel of the diagram.
+     * INCLUDE: the diagram/graph/circuit/chemical structure/table itself, all its internal labels, axis values, numbers, component values.
+     * For the question-level imageBox: ONLY include a diagram that appears in the question STEM (above the options). DO NOT include option diagrams here.
+     * EXCLUDE (CRITICAL): The question's own stem text repeated above the figure, headers, footers, institute names, date stamps, "Space for Rough Work", and anything from adjacent questions.
+     * DO NOT let the bounding box touch ANY text that is part of the question itself.
 
-   - Example A (OVER-INCLUSION - BAD): For a duct-flow diagram, drawing a box that includes the text "Water flows through a frictionless duct..." above it and the page footer below it. Correct behavior: tightly crop only the duct diagram (and its visual options if they exist), EXCLUDING the textual stem.
-   - Example B (UNDER-INCLUSION - BAD): A question where a main diagram is followed by 4 small graph answer options labeled (1)-(4). Drawing a box that stops at the main diagram alone. Correct behavior: extend the box downwards to include all 4 graphs.
-   
+   - VISUAL OPTIONS (CRITICAL NEW RULE): If answer options ARE diagrams/images (e.g., 4 chemical structures, 4 graphs, 4 circuit diagrams labeled A/B/C/D or (1)/(2)/(3)/(4)), you MUST:
+     a) Set "hasVisualOptions": true
+     b) Set the option text for each option to just the label: "(1)", "(2)", "(3)", "(4)" or whatever label is printed
+     c) Set "optionImageBoxes" with a SEPARATE tight bounding box for EACH individual option diagram:
+        - "A": { "page": 1, "box": [ymin, xmin, ymax, xmax] }  ← crops ONLY option A's diagram
+        - "B": { "page": 1, "box": [ymin, xmin, ymax, xmax] }  ← crops ONLY option B's diagram
+        - "C": { "page": 1, "box": [ymin, xmin, ymax, xmax] }  ← crops ONLY option C's diagram
+        - "D": { "page": 1, "box": [ymin, xmin, ymax, xmax] }  ← crops ONLY option D's diagram
+     d) Each box must be TIGHT around that single option's diagram only — not the label text, not other options.
+
+   - Example A (VISUAL OPTIONS): A question "Which is the correct IUPAC structure?" with 4 chemical structures as options.
+     CORRECT: hasVisualOptions=true, options={A:"(1)",B:"(2)",C:"(3)",D:"(4)"}, optionImageBoxes with 4 separate tight boxes.
+     WRONG: Trying to put all 4 structures in one imageBox or leaving optionImageBoxes null.
+
+   - Example B (STEM DIAGRAM + TEXT OPTIONS): A circuit diagram in the question with text options below.
+     CORRECT: imageBox around the circuit only, no optionImageBoxes (options are text).
+
    - Do NOT set imageBox for text-only tables, assertion tables, or column-matching text. If valid, use "imageBox": { "page": 1, "box": [0.12, 0.5, 0.45, 0.9] } (scale 0-1) and "hasDiagram": true. Note that "page" MUST be the 1-indexed page number WITHIN the PDF chunk provided (e.g. 1 or 2).
 7. JSON ESCAPING: Correctly escape all backslashes. To output $\\frac{1}{2}$ write "$\\\\frac{1}{2}$" in the JSON string. Do NOT output raw control characters.
 8. ANSWER KEYS: Extract if available; else set "correctAnswer": "A" and "explanation": null.
@@ -221,7 +255,9 @@ OUTPUT: Return a valid JSON array of question objects. No markdown fences. No ex
     "chapter": "Kinematics",
     "questionText": "Full question text including all sub-parts",
     "hasDiagram": false,
-    "imageBox": null, // If it has a diagram, MUST be: { "page": 1, "box": [0.12, 0.5, 0.45, 0.9] }
+    "hasVisualOptions": false,
+    "imageBox": null,
+    "optionImageBoxes": null,
     "options": {
       "A": "Option A text",
       "B": "Option B text",

@@ -591,16 +591,28 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
               {['A', 'B', 'C', 'D'].map(opt => {
                 const selected = questionStates[q.id]?.selectedOption === opt
+                const optionImageUrl = q.optionImageUrls?.[opt]
                 return (
                   <button key={opt} onClick={() => handleAnswer(q.id, opt)} style={{
-                    padding: '16px 20px', borderRadius: 12, border: `2px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                    padding: optionImageUrl ? '12px 16px' : '16px 20px', borderRadius: 12, border: `2px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
                     background: selected ? 'var(--accent)15' : 'var(--surface)',
                     color: selected ? 'var(--accent)' : '#e2e8f0',
                     textAlign: 'left', cursor: 'pointer', fontSize: questionFontSize - 1, fontWeight: selected ? 600 : 400,
-                    transition: 'all 0.15s', display: 'flex', alignItems: 'flex-start', gap: 14
+                    transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 14
                   }}>
                     <span style={{ width: 28, height: 28, borderRadius: 8, background: selected ? 'var(--accent)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: selected ? 'white' : '#94a3b8', flexShrink: 0 }}>{opt}</span>
-                    <span style={{ flex: 1, marginTop: 3 }}><MathText text={q.options?.[opt] || `Option ${opt}`} /></span>
+                    {optionImageUrl ? (
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <img
+                          src={optionImageUrl}
+                          alt={`Option ${opt}`}
+                          onClick={(e) => { e.stopPropagation(); setZoomedImage(optionImageUrl); }}
+                          style={{ maxHeight: 120, maxWidth: '100%', borderRadius: 6, objectFit: 'contain', cursor: 'zoom-in', border: '1px solid var(--border)' }}
+                        />
+                      </div>
+                    ) : (
+                      <span style={{ flex: 1, marginTop: 3 }}><MathText text={q.options?.[opt] || `Option ${opt}`} /></span>
+                    )}
                   </button>
                 )
               })}

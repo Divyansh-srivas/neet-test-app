@@ -22,6 +22,7 @@ async function extractImagesWithTimeout(pdfBuffer, questions, jobId) {
                 processor = await createPdfImageProcessor(pdfBuffer);
 
                 for (const q of questions) {
+                    // 1. Crop the main question diagram (stem image)
                     if (q && q.imageBox && q.imageBox.page) {
                         try {
                             const croppedImageBuffer = await processor.cropRegion(q.imageBox.page, q.imageBox.box);
@@ -35,10 +36,39 @@ async function extractImagesWithTimeout(pdfBuffer, questions, jobId) {
                                 const { data: publicUrlData } = supabaseAdmin.storage.from('uploads').getPublicUrl(fileName);
                                 q.diagramUrl = publicUrlData.publicUrl;
                                 processedImages++;
-                                logger.info(`[imageProcessor] Uploaded diagram qNum=${q.qNum} (${processedImages} total)`);
+                                logger.info(`[imageProcessor] Uploaded stem diagram qNum=${q.qNum} (${processedImages} total)`);
                             }
                         } catch (cropErr) {
-                            logger.error(`[imageProcessor] Skipping qNum=${q.qNum}: ${cropErr.message}`);
+                            logger.error(`[imageProcessor] Skipping stem image qNum=${q.qNum}: ${cropErr.message}`);
+                        }
+                    }
+
+                    // 2. Crop individual option images when options are visual diagrams
+                    if (q && q.optionImageBoxes && typeof q.optionImageBoxes === 'object') {
+                        q.optionImageUrls = {};
+                        for (const [optKey, optBox] of Object.entries(q.optionImageBoxes)) {
+                            if (!optBox || !optBox.page || !optBox.box) continue;
+                            try {
+                                const optBuffer = await processor.cropRegion(optBox.page, optBox.box);
+                                const optFileName = `diagrams/${jobId}_p${optBox.page}_q${q.qNum}_opt${optKey}_${Date.now()}.png`;
+
+                                const { error: optUploadErr } = await supabaseAdmin.storage
+                                    .from('uploads')
+                                    .upload(optFileName, optBuffer, { contentType: 'image/png', upsert: true });
+
+                                if (!optUploadErr) {
+                                    const { data: optUrlData } = supabaseAdmin.storage.from('uploads').getPublicUrl(optFileName);
+                                    q.optionImageUrls[optKey] = optUrlData.publicUrl;
+                                    processedImages++;
+                                    logger.info(`[imageProcessor] Uploaded option image qNum=${q.qNum} opt=${optKey}`);
+                                }
+                            } catch (optCropErr) {
+                                logger.error(`[imageProcessor] Skipping option image qNum=${q.qNum} opt=${optKey}: ${optCropErr.message}`);
+                            }
+                        }
+                        // If no option images were successfully uploaded, remove the empty object
+                        if (Object.keys(q.optionImageUrls).length === 0) {
+                            q.optionImageUrls = null;
                         }
                     }
                 }

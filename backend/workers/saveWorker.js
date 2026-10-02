@@ -38,7 +38,9 @@ export const createSaveWorker = (io) => {
                     options: q.options,
                     correct_option: q.correct,
                     explanation: q.explanation,
-                    diagram_url: q.diagramUrl || null
+                    diagram_url: q.diagramUrl || null,
+                    option_image_urls: q.optionImageUrls || null,
+                    has_visual_options: q.hasVisualOptions || false
                 });
                 
                 if (q.imageBox && q.diagramUrl) {
