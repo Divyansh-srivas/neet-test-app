@@ -223,6 +223,7 @@ ${languageRule}
      * For the question-level imageBox: ONLY include a diagram that appears in the question STEM (above the options). DO NOT include option diagrams here.
      * EXCLUDE (CRITICAL): The question's own stem text repeated above the figure, headers, footers, institute names, date stamps, "Space for Rough Work", and anything from adjacent questions.
      * DO NOT let the bounding box touch ANY text that is part of the question itself.
+     * EXCEPTION FOR INLINE STRUCTURES: If a dense chemical structure is embedded inline directly next to the question text, you MAY include the immediately adjacent text in the bounding box if separating them is impossible.
 
    - VISUAL OPTIONS (CRITICAL NEW RULE): If answer options ARE diagrams/images (e.g., 4 chemical structures, 4 graphs, 4 circuit diagrams labeled A/B/C/D or (1)/(2)/(3)/(4)), you MUST:
      a) Set "hasVisualOptions": true
@@ -303,6 +304,50 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                         }
                     },
                     required: ["page", "box"]
+                },
+                hasVisualOptions: { type: "boolean", nullable: true },
+                optionImageBoxes: {
+                    type: "object",
+                    nullable: true,
+                    description: "If answer options are diagrams (hasVisualOptions is true), provide a bounding box for each option.",
+                    properties: {
+                        A: {
+                            type: "object",
+                            nullable: true,
+                            properties: {
+                                page: { type: "number" },
+                                box: { type: "array", items: { type: "number" } }
+                            },
+                            required: ["page", "box"]
+                        },
+                        B: {
+                            type: "object",
+                            nullable: true,
+                            properties: {
+                                page: { type: "number" },
+                                box: { type: "array", items: { type: "number" } }
+                            },
+                            required: ["page", "box"]
+                        },
+                        C: {
+                            type: "object",
+                            nullable: true,
+                            properties: {
+                                page: { type: "number" },
+                                box: { type: "array", items: { type: "number" } }
+                            },
+                            required: ["page", "box"]
+                        },
+                        D: {
+                            type: "object",
+                            nullable: true,
+                            properties: {
+                                page: { type: "number" },
+                                box: { type: "array", items: { type: "number" } }
+                            },
+                            required: ["page", "box"]
+                        }
+                    }
                 },
                 options: {
                     type: "object",
