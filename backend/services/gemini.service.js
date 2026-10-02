@@ -216,7 +216,8 @@ ${languageRule}
 5. MATCH THE FOLLOWING / COLUMN-MATCHING QUESTIONS: Format as numbered plain-text lines. NEVER use pipe characters (|) or markdown table syntax (:---) for ANY reason.
    - CORRECT: "Match the following:\n1. Mitochondria - Powerhouse\n2. Ribosome - Protein synthesis"
    - WRONG:   "Column I | Column II\n:---|:---\nMitochondria | Powerhouse"   (pipe/markdown FORBIDDEN)
-6. DIAGRAMS & FIGURES: Only set 'imageBox' when the question contains an actual VISUAL element: photograph, drawn diagram, anatomical figure, graph/chart, chemical structure, or circuit diagram.
+6. DIAGRAMS & FIGURES (CRITICAL FOR CHEMISTRY): You MUST set 'imageBox' and "hasDiagram": true whenever a question or option contains an actual VISUAL element. This includes: photographs, graphs, anatomical figures, circuit diagrams, AND ESPECIALLY chemical structures.
+   - DENSE INLINE CHEMICAL STRUCTURES: In IUPAC/Organic Chemistry questions, chemical structures are often small, dense, and placed inline (e.g., branched chains like CH3-CH(OH)-..., skeletal structures, benzene rings). These ARE diagrams. You MUST extract an imageBox for them. NEVER try to transcribe a complex 2D branched chemical structure purely as text if it relies on vertical bonds or rings — treat it as a diagram.
    - CRITICAL BOUNDING BOX RULE: Your imageBox must capture EXACTLY the figure content needed to answer the question — nothing less, nothing more.
      * INCLUDE: the diagram/graph/circuit/chemical structure/table itself, all its internal labels, axis values, numbers, component values.
      * For the question-level imageBox: ONLY include a diagram that appears in the question STEM (above the options). DO NOT include option diagrams here.
