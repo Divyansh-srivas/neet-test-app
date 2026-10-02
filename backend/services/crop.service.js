@@ -67,6 +67,10 @@ export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
             }, 15000))
         ]);
         
+        // CRITICAL FIX: Allow PDF.js microtasks to finish writing to the canvas context
+        // before we lock it for encoding in Rust. This prevents the "Failed to unwrap exclusive reference" crash.
+        await new Promise(r => setTimeout(r, 50));
+        
         // Encode to PNG buffer
         return await canvas.encode('png');
     } catch (e) {
@@ -155,6 +159,10 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
             }, 15000))
         ]);
         
+        // CRITICAL FIX: Allow PDF.js microtasks to finish writing to the canvas context
+        // before we lock it for encoding in Rust. This prevents the "Failed to unwrap exclusive reference" crash.
+        await new Promise(r => setTimeout(r, 50));
+        
         return await canvas.encode('png');
     } catch (e) {
         throw new Error(`PDF render failed in cropMultiPagePdfRegionToImage: ${e.message}`);
@@ -234,6 +242,10 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
                     reject(new Error('PDF render timed out after 15 seconds'));
                 }, 15000))
             ]);
+            
+            // CRITICAL FIX: Allow PDF.js microtasks to finish writing to the canvas context
+            // before we lock it for encoding in Rust. This prevents the "Failed to unwrap exclusive reference" crash.
+            await new Promise(r => setTimeout(r, 50));
             
             return await canvas.encode('png');
         },

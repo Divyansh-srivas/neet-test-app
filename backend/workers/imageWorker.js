@@ -33,23 +33,42 @@ export const createImageWorker = (io) => {
     });
     
     worker.on('failed', async (job, err) => {
-        logger.error(`[imageWorker] Job ${job?.id} failed natively or via JS: ${err.message}`);
+        logger.error(`[imageWorker] Job ${job?.id} failed natively or via JS: ${err.message}. Skipping images and proceeding to text processing.`);
         
-        // CRITICAL: Ensure Supabase knows the job failed so it doesn't get stuck at 75% forever
         if (job && job.data && job.data.jobId) {
             try {
-                await supabaseAdmin.from('jobs').update({ 
-                    status: 'failed', 
-                    error_message: 'Image extraction crashed natively: ' + err.message 
-                }).eq('id', job.data.jobId);
-            } catch (dbErr) {}
-        }
+                // REQUIREMENT #3: Non-fatal failure. Do not fail the job in Supabase.
+                // Push it directly to the next stage so the student gets text-only questions.
+                await queues.questionProcessing.add('process-questions', job.data, {
+                    attempts: 2,
+                    backoff: { type: 'fixed', delay: 5000 }
+                });
 
-        if (job && job.data && job.data.userId) {
-            io.to(job.data.userId).emit('job-failed', { 
-                jobId: job.data.jobId, 
-                error: err.message 
-            });
+                if (job.data.userId) {
+                    io.to(job.data.userId).emit('job-progress', { 
+                        jobId: job.data.jobId, 
+                        progress: 80, 
+                        status: 'Image extraction skipped (error). Processing text...' 
+                    });
+                }
+            } catch (recoverErr) {
+                logger.error(`[imageWorker] Failed to recover job: ${recoverErr.message}`);
+                // Only if recovery fails, mark as failed in DB
+                try {
+                    await supabaseAdmin.from('jobs').update({ 
+                        status: 'failed', 
+                        error_message: 'Something went wrong while processing your PDF. Please try again or contact support.' 
+                    }).eq('id', job.data.jobId);
+                } catch (dbErr) {}
+
+                // REQUIREMENT #5: User-facing friendly error message
+                if (job.data.userId) {
+                    io.to(job.data.userId).emit('job-failed', { 
+                        jobId: job.data.jobId, 
+                        error: 'Something went wrong while processing your PDF. Please try again or contact support.' 
+                    });
+                }
+            }
         }
     });
 
