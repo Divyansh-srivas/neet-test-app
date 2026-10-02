@@ -37,7 +37,7 @@ export const createAiWorker = (io) => {
                 const chunkIdx = Math.floor(i / chunkSize) + 1;
                 const startPage = i + 1;
                 const endPage = Math.min(i + chunkSize, totalPages);
-                const cacheKey = `chunk_cache:${job.data.fileHash}:${startPage}:${endPage}:${process.env.GEMINI_MODEL || 'gemini-3.6-flash'}:v3`;
+                const cacheKey = `chunk_cache:${job.data.fileHash}:${startPage}:${endPage}:${language}:${process.env.GEMINI_MODEL || 'gemini-3.6-flash'}:v3`;
                 const redis = getRedisConnection();
                 let chunkSuccess = false;
                 let chunkResult = null;

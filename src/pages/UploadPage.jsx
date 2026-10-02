@@ -106,7 +106,6 @@ export default function UploadPage({ setPage, setActiveTest }) {
           >
             <option value="English">English</option>
             <option value="Hindi">Hindi</option>
-            <option value="Bilingual">Bilingual (Both)</option>
           </select>
         </div>
       </div>

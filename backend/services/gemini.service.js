@@ -353,6 +353,12 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
 
             logger.info(`[GEMINI NATIVE] Attempt ${attempt}/4 — Calling ${modelName} with PDF inline data...`);
             
+            // If we are retrying specifically because of a language mismatch, inject a very aggressive reminder
+            let currentPrompt = prompt;
+            if (lastError && lastError.message === "LANGUAGE_MISMATCH_DETECTED") {
+                currentPrompt += `\n\nCRITICAL SYSTEM OVERRIDE: YOUR PREVIOUS ATTEMPT FAILED BECAUSE YOU USED THE WRONG LANGUAGE. YOU MUST ABSOLUTELY RE-WRITE EVERY QUESTION AND OPTION IN STRICT ${language.toUpperCase()} REGARDLESS OF THE ORIGINAL DOCUMENT TEXT.`;
+            }
+
             let response;
             try {
                 response = await Promise.race([
@@ -360,7 +366,7 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                         model: modelName,
                         contents: [
                             { inlineData: { data: base64Pdf, mimeType: 'application/pdf' } },
-                            prompt
+                            currentPrompt
                         ],
                         config: {
                             responseMimeType: 'application/json',
@@ -461,14 +467,42 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
             }
             const normalized = normalizeQuestions(safeParsedRaw);
 
-            // Post-process all image boxes: PASS 2 VISUAL HUNT (REMOVED by user request)
-            for (const q of normalized) {
-                if (q.hasDiagram) {
-                    // Pass 2 Hunt logic removed entirely to prevent grep confusion and guarantee it is disabled.
+            // REQUIREMENT 2: Post-extraction language script validation
+            let languageMismatch = false;
+            let expectedScript = language === 'Hindi' ? 'Devanagari' : (language === 'English' ? 'Latin' : 'Any');
+            
+            if (expectedScript !== 'Any' && normalized.length > 0) {
+                for (const q of normalized) {
+                    const textToCheck = q.questionText + " " + Object.values(q.options || {}).join(" ");
+                    // Simple heuristic: count Hindi characters
+                    const hindiMatches = textToCheck.match(/[\u0900-\u097F]/g);
+                    const hindiCount = hindiMatches ? hindiMatches.length : 0;
+                    
+                    // Filter out math/numbers/ascii to get pure letters for ratio calculation
+                    const lettersOnly = textToCheck.replace(/[^a-zA-Z\u0900-\u097F]/g, '');
+                    const totalLetters = lettersOnly.length;
+                    
+                    if (totalLetters > 10) { 
+                        const hindiRatio = hindiCount / totalLetters;
+                        
+                        if (expectedScript === 'Devanagari' && hindiRatio < 0.1) {
+                            logger.warn(`[GEMINI NATIVE] Expected Hindi but found English (ratio ${hindiRatio.toFixed(2)}): "${q.questionText.substring(0, 50)}..."`);
+                            languageMismatch = true;
+                            break;
+                        } else if (expectedScript === 'Latin' && hindiRatio > 0.2) {
+                            logger.warn(`[GEMINI NATIVE] Expected English but found Hindi (ratio ${hindiRatio.toFixed(2)}): "${q.questionText.substring(0, 50)}..."`);
+                            languageMismatch = true;
+                            break;
+                        }
+                    }
                 }
             }
+            
+            if (languageMismatch) {
+                throw new Error("LANGUAGE_MISMATCH_DETECTED");
+            }
 
-            logger.info(`[GEMINI NATIVE] Parsed ${normalized.length} questions from page`);
+            logger.info(`[GEMINI NATIVE] Parsed ${normalized.length} questions from page (Language: ${language} - Verified)`);
             extractedQuestions = normalized;
             success = true;
             
