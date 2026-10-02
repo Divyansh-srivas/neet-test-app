@@ -124,11 +124,15 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
             ({ ymin, xmin, ymax, xmax } = bbox);
         }
 
-        // Calculate pixel coordinates from normalized 0-1000 coordinates
-        const top = (ymin / 1000) * viewport.height;
-        const left = (xmin / 1000) * viewport.width;
-        const bottom = (ymax / 1000) * viewport.height;
-        const right = (xmax / 1000) * viewport.width;
+        // Auto-detect coordinate scale: Gemini returns 0-1, legacy code used 0-1000
+        const scale1000 = (ymin > 1 || xmin > 1 || ymax > 1 || xmax > 1);
+        const divisor = scale1000 ? 1000 : 1;
+
+        // Calculate pixel coordinates
+        const top = (ymin / divisor) * viewport.height;
+        const left = (xmin / divisor) * viewport.width;
+        const bottom = (ymax / divisor) * viewport.height;
+        const right = (xmax / divisor) * viewport.width;
         
         const width = right - left;
         const height = bottom - top;
@@ -214,10 +218,14 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
                 ({ ymin, xmin, ymax, xmax } = bbox);
             }
 
-            const top = (ymin / 1000) * viewport.height;
-            const left = (xmin / 1000) * viewport.width;
-            const bottom = (ymax / 1000) * viewport.height;
-            const right = (xmax / 1000) * viewport.width;
+            // Auto-detect coordinate scale: Gemini returns 0-1, legacy code used 0-1000
+            const scale1000 = (ymin > 1 || xmin > 1 || ymax > 1 || xmax > 1);
+            const divisor = scale1000 ? 1000 : 1;
+
+            const top = (ymin / divisor) * viewport.height;
+            const left = (xmin / divisor) * viewport.width;
+            const bottom = (ymax / divisor) * viewport.height;
+            const right = (xmax / divisor) * viewport.width;
             
             const width = right - left;
             const height = bottom - top;
