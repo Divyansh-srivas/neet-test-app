@@ -23,11 +23,11 @@ const subjects = [
   },
 ];
 
-export default function LibraryPage() {
+export default function LibraryPage({ setPage, setActiveTest }) {
   const [selectedSubject, setSelectedSubject] = useState(null);
 
   if (selectedSubject) {
-    return <LibrarySubjectPage subject={selectedSubject} onBack={() => setSelectedSubject(null)} />;
+    return <LibrarySubjectPage subject={selectedSubject} onBack={() => setSelectedSubject(null)} setPage={setPage} setActiveTest={setActiveTest} />;
   }
 
   return (

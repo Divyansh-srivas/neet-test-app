@@ -14,6 +14,7 @@ import BookmarksPage from './pages/BookmarksPage'
 import LibraryPage from './pages/LibraryPage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
+import AdminLibraryPage from './pages/AdminLibraryPage'
 import { LogOut } from 'lucide-react'
 import NotificationCenter from './components/NotificationCenter'
 import LogoutConfirmModal from './components/LogoutConfirmModal'
@@ -177,7 +178,8 @@ function AppContent() {
         {page === 'exam' && activeTest && <ExamPage test={activeTest} setPage={setPage} setActiveTest={setActiveTest} />}
         {page === 'analysis' && activeTest && <AnalysisPage test={activeTest} setPage={setPage} />}
         {page === 'bookmarks' && <BookmarksPage />}
-        {page === 'library' && <LibraryPage />}
+        {page === 'library' && <LibraryPage setPage={setPage} setActiveTest={setActiveTest} />}
+        {page === 'admin-library' && <AdminLibraryPage />}
         {page === 'profile' && <ProfilePage />}
         {page === 'settings' && <SettingsPage />}
 

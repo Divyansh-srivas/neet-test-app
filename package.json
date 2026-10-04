@@ -19,6 +19,7 @@
     "pdfjs-dist": "^3.11.174",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-easy-crop": "^6.2.3",
     "react-katex": "^3.1.0",
     "react-markdown": "^10.1.0",
     "react-rnd": "^10.5.3",

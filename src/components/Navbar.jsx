@@ -1,6 +1,7 @@
 import React from 'react'
-import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle, Library } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle, Library, Database } from 'lucide-react'
 import logoImg from '../assets/logo.jpg'
+import { useAuth } from '../utils/useAuth.jsx'
 
 
 export default function Navbar({ page, setPage }) {
@@ -12,6 +13,11 @@ export default function Navbar({ page, setPage }) {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
+
+  const { user } = useAuth();
+  if (user?.email === 'gauravpatel5876@gmail.com') {
+      navItems.push({ id: 'admin-library', label: 'Admin Library', icon: Database });
+  }
 
   return (
     <>

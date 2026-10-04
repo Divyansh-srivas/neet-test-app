@@ -11,6 +11,7 @@ import { getStudyMaterials } from '../controllers/libraryController.js';
 import { getPdfFile } from '../controllers/pdfController.js';
 import { checkSchema } from '../controllers/debugController.js';
 import { deleteTest as deleteTestCtrl, getTests } from '../controllers/testsController.js';
+import * as libAdmin from '../controllers/libraryAdminController.js';
 
 const router = express.Router();
 
@@ -26,6 +27,15 @@ const upload = multer({
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'application/pdf') cb(null, true);
         else cb(new Error('Only PDFs are allowed'));
+    }
+});
+
+const imageUpload = multer({
+    dest: uploadDir,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) cb(null, true);
+        else cb(new Error('Only images are allowed'));
     }
 });
 
@@ -121,6 +131,18 @@ router.delete('/sessions/:id', async (req, res) => {
 
 // Library API
 router.get('/library/:subject', getStudyMaterials);
+
+// Admin Library API
+router.get('/admin/library/subjects', libAdmin.getSubjects);
+router.get('/admin/library/chapters', libAdmin.getChapters);
+router.post('/admin/library/chapters', libAdmin.createChapter);
+router.put('/admin/library/chapters/:id', libAdmin.updateChapter);
+router.delete('/admin/library/chapters/:id', libAdmin.deleteChapter);
+router.get('/admin/library/questions', libAdmin.getQuestions);
+router.post('/admin/library/questions', libAdmin.createQuestion);
+router.put('/admin/library/questions/:id', libAdmin.updateQuestion);
+router.delete('/admin/library/questions/:id', libAdmin.deleteQuestion);
+router.post('/admin/library/upload-image', uploadLimiter, imageUpload.single('image'), libAdmin.uploadImage);
 
 // PDF Download Proxy Route
 router.get('/pdf/:uploadId', getPdfFile);
