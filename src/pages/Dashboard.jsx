@@ -22,20 +22,21 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
         setTests(getTests(user?.uid));
         
         if (user?.uid) {
-            supabase.from('tests').select('*').eq('teacher_id', user.uid).then(({ data, error }) => {
-                if (error) console.error("Error fetching sync tests:", error.message);
-                if (data && data.length > 0) {
-                    data.forEach(t => {
-                        const existing = getTest(user.uid, t.id);
-                        if (existing) {
-                            // Merges new questions and PDF URL, preserving answers, completed state, score
-                            saveTest(user.uid, { ...existing, questions: t.questions, pdfUrl: existing.pdfUrl || t.questions?.[0]?.pdfUrl, title: t.name || t.title });
-                        } else {
-                            saveTest(user.uid, { ...t, title: t.name, pdfUrl: t.questions?.[0]?.pdfUrl });
-                        }
-                    });
-                    setTests(getTests(user.uid));
-                }
+            import('../api/apiClient').then(({ fetchAPI }) => {
+                fetchAPI('/api/tests').then((data) => {
+                    if (data && data.length > 0) {
+                        data.forEach(t => {
+                            const existing = getTest(user.uid, t.id);
+                            if (existing) {
+                                // Merges new questions and PDF URL, preserving answers, completed state, score
+                                saveTest(user.uid, { ...existing, questions: t.questions, pdfUrl: existing.pdfUrl || t.questions?.[0]?.pdfUrl, title: t.name || t.title });
+                            } else {
+                                saveTest(user.uid, { ...t, title: t.name, pdfUrl: t.questions?.[0]?.pdfUrl });
+                            }
+                        });
+                        setTests(getTests(user.uid));
+                    }
+                }).catch(err => console.error("Error fetching sync tests:", err.message));
             });
         }
     });

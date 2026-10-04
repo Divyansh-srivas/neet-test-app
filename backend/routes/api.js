@@ -10,7 +10,7 @@ import { getProfile, updateProfile } from '../controllers/profileController.js';
 import { getStudyMaterials } from '../controllers/libraryController.js';
 import { getPdfFile } from '../controllers/pdfController.js';
 import { checkSchema } from '../controllers/debugController.js';
-import { deleteTest as deleteTestCtrl } from '../controllers/testsController.js';
+import { deleteTest as deleteTestCtrl, getTests } from '../controllers/testsController.js';
 
 const router = express.Router();
 
@@ -86,6 +86,7 @@ router.get('/jobs/:id', getJobStatus);
 router.delete('/jobs/:id', deleteJob);
 
 // Tests API
+router.get('/tests', getTests);
 router.delete('/tests/:id', deleteTestCtrl);
 
 // Notes API
@@ -94,6 +95,29 @@ router.put('/notes/:testId', saveNotes);
 // Profile API
 router.get('/profile', getProfile);
 router.put('/profile', updateProfile);
+
+// Sessions API
+router.post('/sessions', async (req, res) => {
+    try {
+        const { device_name, browser, os, ip_address } = req.body;
+        const { data, error } = await supabaseAdmin.from('user_sessions').insert({
+            user_id: req.user.id,
+            device_name, browser, os, ip_address
+        }).select().single();
+        if (error) throw error;
+        res.json(data);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+router.delete('/sessions/:id', async (req, res) => {
+    try {
+        await supabaseAdmin.from('user_sessions').delete().eq('id', req.params.id).eq('user_id', req.user.id);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // Library API
 router.get('/library/:subject', getStudyMaterials);

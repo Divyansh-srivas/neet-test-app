@@ -24,3 +24,25 @@ export const deleteTest = async (req, res) => {
         res.status(500).json({ success: false, error: 'Internal Server Error' });
     }
 };
+
+export const getTests = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        const { data, error } = await supabaseAdmin
+            .from('tests')
+            .select('*')
+            .eq('teacher_id', userId)
+            .order('created_at', { ascending: false });
+            
+        if (error) {
+            logger.error(`Failed to fetch tests for user ${userId}: ${error.message}`);
+            return res.status(500).json({ success: false, error: error.message });
+        }
+        
+        res.status(200).json(data || []);
+    } catch (error) {
+        logger.error(`Error in getTests: ${error.message}`);
+        res.status(500).json({ success: false, error: 'Internal Server Error' });
+    }
+};

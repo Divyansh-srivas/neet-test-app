@@ -191,12 +191,17 @@ export function AuthProvider({ children }) {
         const { browser, os, device_name } = getDeviceInfo()
         const ipRes = await fetch('https://api.ipify.org?format=json').catch(() => null)
         const ipData = ipRes ? await ipRes.json() : { ip: 'Unknown' }
-        const { data: sessionData } = await supabase.from('user_sessions').insert({
-          user_id: firebaseUser.uid,
-          device_name, browser, os,
-          ip_address: ipData.ip
-        }).select().single()
-        if (sessionData) sessionStorage.setItem('neogravix_session_id', sessionData.id)
+        
+        const token = await firebaseUser.getIdToken()
+        const sessionRes = await fetch(`https://api.neogravix.in/api/sessions`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_name, browser, os, ip_address: ipData.ip })
+        })
+        if (sessionRes.ok) {
+            const sessionData = await sessionRes.json()
+            if (sessionData) sessionStorage.setItem('neogravix_session_id', sessionData.id)
+        }
       } catch (_) { }
 
       await fetchProfile(firebaseUser.uid)
@@ -235,12 +240,17 @@ export function AuthProvider({ children }) {
         const { browser, os, device_name } = getDeviceInfo()
         const ipRes = await fetch('https://api.ipify.org?format=json').catch(() => null)
         const ipData = ipRes ? await ipRes.json() : { ip: 'Unknown' }
-        const { data: sessionData } = await supabase.from('user_sessions').insert({
-          user_id: result.user.uid,
-          device_name, browser, os,
-          ip_address: ipData.ip
-        }).select().single()
-        if (sessionData) sessionStorage.setItem('neogravix_session_id', sessionData.id)
+        
+        const token = await result.user.getIdToken()
+        const sessionRes = await fetch(`https://api.neogravix.in/api/sessions`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_name, browser, os, ip_address: ipData.ip })
+        })
+        if (sessionRes.ok) {
+            const sessionData = await sessionRes.json()
+            if (sessionData) sessionStorage.setItem('neogravix_session_id', sessionData.id)
+        }
       } catch (_) { }
 
       await fetchProfile(result.user.uid)
@@ -353,8 +363,12 @@ export function AuthProvider({ children }) {
   const signOut = async () => {
     try {
       const sessionId = sessionStorage.getItem('neogravix_session_id')
-      if (sessionId) {
-        await supabase.from('user_sessions').delete().eq('id', sessionId)
+      if (sessionId && auth.currentUser) {
+        const token = await auth.currentUser.getIdToken()
+        await fetch(`https://api.neogravix.in/api/sessions/${sessionId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
         sessionStorage.removeItem('neogravix_session_id')
       }
     } catch (_) { }
