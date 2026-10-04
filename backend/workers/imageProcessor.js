@@ -2,6 +2,7 @@ import fs from 'fs';
 import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { queues } from '../queue/index.js';
+import { ensureLocalFile } from '../services/storageSync.js';
 
 // Hard global timeout for image extraction - if it takes more than 90s, skip all images and proceed
 const IMAGE_EXTRACTION_TIMEOUT_MS = 90_000;
@@ -37,6 +38,8 @@ async function extractImagesWithTimeout(pdfBuffer, questions, jobId) {
                                 q.diagramUrl = publicUrlData.publicUrl;
                                 processedImages++;
                                 logger.info(`[imageProcessor] Uploaded stem diagram qNum=${q.qNum} (${processedImages} total)`);
+                            } else {
+                                logger.error(`[imageProcessor] Supabase upload error for stem diagram qNum=${q.qNum}: ${uploadError.message}`);
                             }
                         } catch (cropErr) {
                             logger.error(`[imageProcessor] Skipping stem image qNum=${q.qNum}: ${cropErr.message}`);
@@ -61,6 +64,8 @@ async function extractImagesWithTimeout(pdfBuffer, questions, jobId) {
                                     q.optionImageUrls[optKey] = optUrlData.publicUrl;
                                     processedImages++;
                                     logger.info(`[imageProcessor] Uploaded option image qNum=${q.qNum} opt=${optKey}`);
+                                } else {
+                                    logger.error(`[imageProcessor] Supabase upload error for option image qNum=${q.qNum} opt=${optKey}: ${optUploadErr.message}`);
                                 }
                             } catch (optCropErr) {
                                 logger.error(`[imageProcessor] Skipping option image qNum=${q.qNum} opt=${optKey}: ${optCropErr.message}`);
@@ -96,6 +101,7 @@ export default async function (job) {
 
         // Attempt image extraction - NEVER let this block the job from completing
         try {
+            await ensureLocalFile(filePath, storagePath);
             const pdfBuffer = fs.readFileSync(filePath);
             const count = await extractImagesWithTimeout(pdfBuffer, questions, jobId);
             logger.info(`[imageProcessor] Image extraction done: ${count} images for job ${jobId}`);
