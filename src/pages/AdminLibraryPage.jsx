@@ -21,6 +21,7 @@ export default function AdminLibraryPage() {
     // Form state
     const [isCreatingChapter, setIsCreatingChapter] = useState(false);
     const [newChapterName, setNewChapterName] = useState('');
+    const [pageError, setPageError] = useState(null);
     
     const defaultQuestion = {
         question_text: '',
@@ -47,10 +48,23 @@ export default function AdminLibraryPage() {
     // Data Loaders
     const loadSubjects = async () => {
         try {
+            setPageError(null);
             const res = await fetchAPI('/api/admin/library/subjects');
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`HTTP ${res.status}: ${text}`);
+            }
             const data = await res.json();
-            if (Array.isArray(data)) setSubjects(data);
-        } catch (e) { console.error(e); }
+            if (Array.isArray(data)) {
+                setSubjects(data);
+                if (data.length === 0) setPageError("Table is empty (0 rows returned). Please insert the subjects in Supabase!");
+            } else {
+                throw new Error(`Expected array but got: ${JSON.stringify(data)}`);
+            }
+        } catch (e) { 
+            console.error(e); 
+            setPageError(e.message);
+        }
     };
 
     const loadChapters = async (subId) => {
@@ -241,6 +255,15 @@ export default function AdminLibraryPage() {
             {view === 'subjects' && (
                 <div>
                     <p style={{ color: 'var(--muted)', marginBottom: 24, fontSize: 16 }}>Select a subject below to manage its chapters and questions.</p>
+                    
+                    {pageError && (
+                        <div style={{ padding: 20, background: 'rgba(239,68,68,0.2)', border: '2px solid #ef4444', color: 'white', borderRadius: 12, marginBottom: 24 }}>
+                            <h3 style={{ margin: '0 0 8px 0', color: '#fca5a5' }}>Debug Error Info:</h3>
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{pageError}</pre>
+                            <p style={{ margin: '12px 0 0 0', fontSize: 14 }}>Please take a screenshot of this red box so I can fix it!</p>
+                        </div>
+                    )}
+
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
                         {subjects.map(s => (
                             <div 
