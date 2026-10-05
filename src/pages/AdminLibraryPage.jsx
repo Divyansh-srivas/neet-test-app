@@ -54,12 +54,16 @@ export default function AdminLibraryPage() {
         }
     }, [selectedChapter]);
 
-    const loadSubjects = async () => {
         try {
             const res = await fetchAPI('/api/admin/library/subjects');
             const data = await res.json();
-            setSubjects(data);
-            if (data.length > 0 && !selectedSubject) setSelectedSubject(data[0]);
+            if (Array.isArray(data)) {
+                setSubjects(data);
+                if (data.length > 0 && !selectedSubject) setSelectedSubject(data[0]);
+            } else {
+                console.error("API returned non-array for subjects:", data);
+                alert("You don't have admin permissions or your session is invalid.");
+            }
         } catch (e) { console.error(e); }
     };
 
@@ -67,7 +71,9 @@ export default function AdminLibraryPage() {
         try {
             const res = await fetchAPI('/api/admin/library/chapters');
             const data = await res.json();
-            setChapters(data.filter(c => c.subject_id === subId));
+            if (Array.isArray(data)) {
+                setChapters(data.filter(c => c.subject_id === subId));
+            }
         } catch (e) { console.error(e); }
     };
 
@@ -75,7 +81,9 @@ export default function AdminLibraryPage() {
         try {
             const res = await fetchAPI(`/api/admin/library/questions?chapter_id=${chapId}`);
             const data = await res.json();
-            setQuestions(data);
+            if (Array.isArray(data)) {
+                setQuestions(data);
+            }
         } catch (e) { console.error(e); }
     };
 
