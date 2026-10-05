@@ -114,7 +114,7 @@ export function JobProvider({ children }) {
     setSocket(newSocket);
 
     // Fetch existing active jobs from backend via API on mount
-    fetchExistingJobs();
+    fetchExistingJobs().catch(console.error);
 
     let consecutiveErrors = 0;
     // 10-second Polling fallback for guaranteed UI updates even without WebSockets
