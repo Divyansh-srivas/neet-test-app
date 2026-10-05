@@ -56,7 +56,8 @@ export default function AdminLibraryPage() {
 
     const loadSubjects = async () => {
         try {
-            const data = await fetchAPI('/api/admin/library/subjects');
+            const res = await fetchAPI('/api/admin/library/subjects');
+            const data = await res.json();
             setSubjects(data);
             if (data.length > 0 && !selectedSubject) setSelectedSubject(data[0]);
         } catch (e) { console.error(e); }
@@ -64,14 +65,16 @@ export default function AdminLibraryPage() {
 
     const loadChapters = async (subId) => {
         try {
-            const data = await fetchAPI('/api/admin/library/chapters');
+            const res = await fetchAPI('/api/admin/library/chapters');
+            const data = await res.json();
             setChapters(data.filter(c => c.subject_id === subId));
         } catch (e) { console.error(e); }
     };
 
     const loadQuestions = async (chapId) => {
         try {
-            const data = await fetchAPI(`/api/admin/library/questions?chapter_id=${chapId}`);
+            const res = await fetchAPI(`/api/admin/library/questions?chapter_id=${chapId}`);
+            const data = await res.json();
             setQuestions(data);
         } catch (e) { console.error(e); }
     };
@@ -79,10 +82,12 @@ export default function AdminLibraryPage() {
     const handleCreateChapter = async () => {
         if (!newChapterName.trim() || !selectedSubject) return;
         try {
-            const newChap = await fetchAPI('/api/admin/library/chapters', {
+            const res = await fetchAPI('/api/admin/library/chapters', {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ subject_id: selectedSubject.id, name: newChapterName, order_index: chapters.length })
             });
+            const newChap = await res.json();
             setChapters([...chapters, newChap]);
             setNewChapterName('');
             setIsCreatingChapter(false);
@@ -105,11 +110,13 @@ export default function AdminLibraryPage() {
             if (editingQuestionId) {
                 await fetchAPI(`/api/admin/library/questions/${editingQuestionId}`, {
                     method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(qForm)
                 });
             } else {
                 await fetchAPI('/api/admin/library/questions', {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ...qForm, chapter_id: selectedChapter.id })
                 });
             }
