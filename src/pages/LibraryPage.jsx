@@ -1,58 +1,162 @@
 import React, { useState } from 'react';
 import { Atom, FlaskConical, Dna, Sparkles, ArrowRight } from 'lucide-react';
 import LibrarySubjectPage from './LibrarySubjectPage';
+import PracticeQuizSetup from './PracticeQuizSetup';
+import PracticeQuizPage from './PracticeQuizPage';
+import PracticeQuizSummary from './PracticeQuizSummary';
 
 const subjects = [
   {
     title: 'Physics',
-    desc: 'Chapter-wise JEE, NEET & random practice questions',
+    desc: 'Chapter-wise questions with instant-feedback practice quizzes',
     icon: Atom,
     color: { icon: '#60a5fa', bg: 'rgba(59,130,246,0.2)', border: 'rgba(59,130,246,0.5)', badgeBg: 'rgba(59,130,246,0.1)', badgeText: '#93c5fd', badgeBorder: 'rgba(59,130,246,0.3)', glow: 'rgba(59,130,246,0.1)' },
   },
   {
     title: 'Chemistry',
-    desc: 'Chapter-wise JEE, NEET & random practice questions',
+    desc: 'Chapter-wise questions with instant-feedback practice quizzes',
     icon: FlaskConical,
     color: { icon: '#34d399', bg: 'rgba(16,185,129,0.2)', border: 'rgba(16,185,129,0.5)', badgeBg: 'rgba(16,185,129,0.1)', badgeText: '#6ee7b7', badgeBorder: 'rgba(16,185,129,0.3)', glow: 'rgba(16,185,129,0.1)' },
   },
   {
     title: 'Biology',
-    desc: 'Chapter-wise NEET & random practice questions',
+    desc: 'Chapter-wise questions with instant-feedback practice quizzes',
     icon: Dna,
     color: { icon: '#f472b6', bg: 'rgba(236,72,153,0.2)', border: 'rgba(236,72,153,0.5)', badgeBg: 'rgba(236,72,153,0.1)', badgeText: '#f9a8d4', badgeBorder: 'rgba(236,72,153,0.3)', glow: 'rgba(236,72,153,0.1)' },
   },
 ];
 
-export default function LibraryPage({ setPage, setActiveTest }) {
-  const [selectedSubject, setSelectedSubject] = useState(null);
+// Internal sub-views managed entirely within LibraryPage
+// so the formal exam flow (App.jsx pretest/exam/analysis) is NEVER touched.
+// flow: 'subjects' → 'subject-detail' → 'setup' → 'quiz' → 'summary'
 
-  if (selectedSubject) {
-    return <LibrarySubjectPage subject={selectedSubject} onBack={() => setSelectedSubject(null)} setPage={setPage} setActiveTest={setActiveTest} />;
+export default function LibraryPage() {
+  const [flow, setFlow]                 = useState('subjects');   // which internal screen
+  const [selectedSubject, setSelectedSubject] = useState(null);  // e.g. 'Physics'
+  const [quizSetupSubject, setQuizSetupSubject] = useState(null); // pre-selected subject for setup
+  const [quizData, setQuizData]         = useState(null);        // { questions, notices, timed, timerMins }
+  const [quizAnswers, setQuizAnswers]   = useState({});
+
+  // ── Navigation helpers ──────────────────────────────────────
+  const goToSubjectDetail = (subjectTitle) => {
+    setSelectedSubject(subjectTitle);
+    setFlow('subject-detail');
+  };
+
+  const goToSetup = (subjectName = null) => {
+    setQuizSetupSubject(subjectName); // null = open wizard with all subjects
+    setFlow('setup');
+  };
+
+  const handleGenerate = (data) => {
+    setQuizData(data);
+    setQuizAnswers({});
+    setFlow('quiz');
+  };
+
+  const handleQuizFinish = (answers) => {
+    setQuizAnswers(answers);
+    setFlow('summary');
+  };
+
+  const handleRetryWrong = () => {
+    if (!quizData) return;
+    const wrongIds = new Set(
+      quizData.questions
+        .filter(q => quizAnswers[q.id] && quizAnswers[q.id] !== q.correct_option)
+        .map(q => q.id)
+    );
+    const retryQs = quizData.questions.filter(q => wrongIds.has(q.id));
+    setQuizData({ ...quizData, questions: retryQs, notices: [] });
+    setQuizAnswers({});
+    setFlow('quiz');
+  };
+
+  // ── Render ──────────────────────────────────────────────────
+  if (flow === 'subject-detail') {
+    return (
+      <LibrarySubjectPage
+        subject={selectedSubject}
+        onBack={() => setFlow('subjects')}
+        onStartPracticeQuiz={(subj) => goToSetup(subj)}
+      />
+    );
   }
 
+  if (flow === 'setup') {
+    return (
+      <PracticeQuizSetup
+        initialSubject={quizSetupSubject}
+        onGenerate={handleGenerate}
+        onCancel={() => {
+          // If we came from subject detail, go back there; else go to subject list
+          if (quizSetupSubject && selectedSubject) setFlow('subject-detail');
+          else setFlow('subjects');
+        }}
+      />
+    );
+  }
+
+  if (flow === 'quiz' && quizData) {
+    return (
+      <PracticeQuizPage
+        questions={quizData.questions}
+        notices={quizData.notices}
+        timed={quizData.timed}
+        timerMins={quizData.timerMins}
+        onFinish={handleQuizFinish}
+      />
+    );
+  }
+
+  if (flow === 'summary' && quizData) {
+    return (
+      <PracticeQuizSummary
+        questions={quizData.questions}
+        answers={quizAnswers}
+        onBack={() => setFlow('subjects')}
+        onRetryWrong={handleRetryWrong}
+      />
+    );
+  }
+
+  // ── Subject selection home screen ───────────────────────────
   return (
     <div style={{ position: 'relative', minHeight: 'calc(100vh - 80px)', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', color: 'white', overflow: 'hidden' }}>
       
       {/* Background Ambient Glow */}
       <div style={{ position: 'absolute', top: '25%', left: '50%', transform: 'translate(-50%, -50%)', width: 600, height: 350, backgroundColor: 'rgba(37,99,235,0.15)', filter: 'blur(120px)', borderRadius: '50%', pointerEvents: 'none' }} />
 
-      {/* Top Header */}
-      <div style={{ textAlign: 'center', maxWidth: 560, margin: '0 auto 56px auto', position: 'relative', zIndex: 10 }}>
+      {/* Header */}
+      <div style={{ textAlign: 'center', maxWidth: 560, margin: '0 auto 48px auto', position: 'relative', zIndex: 10 }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 9999, backgroundColor: 'rgba(59,130,246,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 20, boxShadow: '0 0 15px rgba(59,130,246,0.15)' }}>
           <Sparkles style={{ width: 14, height: 14 }} />
           Study Library
         </div>
-
         <h1 style={{ fontSize: 'clamp(32px, 5vw, 48px)', fontWeight: 800, letterSpacing: '-0.025em', margin: '0 0 14px 0', lineHeight: 1.1 }}>
           Explore by{' '}
           <span style={{ color: 'transparent', backgroundImage: 'linear-gradient(to right, #60a5fa, #a5b4fc, #22d3ee)', WebkitBackgroundClip: 'text', backgroundClip: 'text' }}>
             Subject
           </span>
         </h1>
-        
-        <p style={{ color: '#9ca3af', fontSize: 15, lineHeight: 1.625, margin: 0 }}>
-          Access chapter-wise study materials, important notes, and curated test modules for your NEET preparation.
+        <p style={{ color: '#9ca3af', fontSize: 15, lineHeight: 1.625, margin: '0 0 24px 0' }}>
+          Access chapter-wise content and curated practice quizzes with instant answer feedback.
         </p>
+        {/* Global Practice Quiz CTA */}
+        <button
+          onClick={() => goToSetup(null)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '12px 28px', borderRadius: 12, border: 'none',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(99,102,241,0.4)', transition: 'transform 0.15s'
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          <Sparkles size={18} /> Start Practice Quiz
+        </button>
       </div>
 
       {/* Subject Cards */}
@@ -63,59 +167,32 @@ export default function LibraryPage({ setPage, setActiveTest }) {
             <div
               key={idx}
               style={{
-                position: 'relative',
-                padding: 32,
-                borderRadius: 24,
-                backgroundColor: 'rgba(12,19,36,0.75)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                backdropFilter: 'blur(24px)',
-                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                textAlign: 'center',
-                overflow: 'hidden',
-                cursor: 'pointer'
+                position: 'relative', padding: 32, borderRadius: 24,
+                backgroundColor: 'rgba(12,19,36,0.75)', border: '1px solid rgba(255,255,255,0.1)',
+                backdropFilter: 'blur(24px)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', display: 'flex',
+                flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+                overflow: 'hidden', cursor: 'pointer'
               }}
-              onClick={() => setSelectedSubject(item.title.toLowerCase())}
+              onClick={() => goToSubjectDetail(item.title)}
               onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-8px)'
-                e.currentTarget.style.borderColor = item.color.border
-                e.currentTarget.style.boxShadow = `0 25px 60px -12px ${item.color.glow}`
-                const iconBubble = e.currentTarget.querySelector('.icon-bubble')
-                if (iconBubble) iconBubble.style.transform = 'scale(1.1)'
-                const spotlight = e.currentTarget.querySelector('.spotlight')
-                if (spotlight) spotlight.style.backgroundColor = 'rgba(59,130,246,0.1)'
+                e.currentTarget.style.transform = 'translateY(-8px)';
+                e.currentTarget.style.borderColor = item.color.border;
+                e.currentTarget.style.boxShadow = `0 25px 60px -12px ${item.color.glow}`;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
-                e.currentTarget.style.boxShadow = '0 25px 50px -12px rgba(0,0,0,0.25)'
-                const iconBubble = e.currentTarget.querySelector('.icon-bubble')
-                if (iconBubble) iconBubble.style.transform = 'scale(1)'
-                const spotlight = e.currentTarget.querySelector('.spotlight')
-                if (spotlight) spotlight.style.backgroundColor = 'rgba(255,255,255,0.03)'
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.boxShadow = '0 25px 50px -12px rgba(0,0,0,0.25)';
               }}
             >
-              {/* Internal Card Hover Radial Spotlight */}
-              <div className="spotlight" style={{ position: 'absolute', top: -64, left: '50%', transform: 'translateX(-50%)', width: 176, height: 176, backgroundColor: 'rgba(255,255,255,0.03)', filter: 'blur(40px)', borderRadius: '50%', pointerEvents: 'none', transition: 'background-color 0.5s ease' }} />
-
-              {/* Icon Bubble */}
-              <div className="icon-bubble" style={{ position: 'relative', width: 80, height: 80, borderRadius: 16, backgroundColor: item.color.bg, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, boxShadow: 'inset 0 2px 4px 0 rgba(0,0,0,0.06)', transition: 'transform 0.3s ease' }}>
+              <div style={{ position: 'absolute', top: -64, left: '50%', transform: 'translateX(-50%)', width: 176, height: 176, backgroundColor: 'rgba(255,255,255,0.03)', filter: 'blur(40px)', borderRadius: '50%', pointerEvents: 'none' }} />
+              <div style={{ position: 'relative', width: 80, height: 80, borderRadius: 16, backgroundColor: item.color.bg, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, transition: 'transform 0.3s ease' }}>
                 <Icon style={{ width: 40, height: 40, color: item.color.icon }} />
               </div>
-
-              {/* Title & Description */}
-              <h3 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.025em', color: 'white', marginBottom: 8, marginTop: 0 }}>
-                {item.title}
-              </h3>
-              <p style={{ fontSize: 14, color: '#9ca3af', lineHeight: 1.625, marginBottom: 24, minHeight: 40, margin: '0 0 24px 0' }}>
-                {item.desc}
-              </p>
-
-              {/* Explore Button */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9999, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', border: `1px solid ${item.color.badgeBorder}`, backgroundColor: item.color.badgeBg, color: item.color.badgeText, boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)', marginTop: 'auto', transition: 'all 0.3s ease' }}>
+              <h3 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.025em', color: 'white', marginBottom: 8, marginTop: 0 }}>{item.title}</h3>
+              <p style={{ fontSize: 14, color: '#9ca3af', lineHeight: 1.625, margin: '0 0 24px 0', minHeight: 40 }}>{item.desc}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9999, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', border: `1px solid ${item.color.badgeBorder}`, backgroundColor: item.color.badgeBg, color: item.color.badgeText, marginTop: 'auto', transition: 'all 0.3s ease' }}>
                 Explore <ArrowRight size={14} />
               </div>
             </div>

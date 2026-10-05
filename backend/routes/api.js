@@ -7,7 +7,7 @@ import { uploadPdf } from '../controllers/uploadController.js';
 import { getJobs, getJobStatus, deleteJob } from '../controllers/jobsController.js';
 import { getNotes, saveNotes } from '../controllers/notesController.js';
 import { getProfile, updateProfile } from '../controllers/profileController.js';
-import { getStudyMaterials } from '../controllers/libraryController.js';
+import { getStudyMaterials, getLibraryChapters, getLibraryPractice, generatePracticeQuiz } from '../controllers/libraryController.js';
 import { getPdfFile } from '../controllers/pdfController.js';
 import { checkSchema } from '../controllers/debugController.js';
 import { deleteTest as deleteTestCtrl, getTests } from '../controllers/testsController.js';
@@ -129,8 +129,11 @@ router.delete('/sessions/:id', async (req, res) => {
     }
 });
 
-// Library API
+// Library API (student-facing)
 router.get('/library/:subject', getStudyMaterials);
+router.get('/library/chapters/:subject', getLibraryChapters);
+router.get('/library/practice/:chapterId', getLibraryPractice);
+router.post('/library/practice/generate', generatePracticeQuiz);
 
 // Admin Library API
 router.get('/admin/library/subjects', libAdmin.getSubjects);

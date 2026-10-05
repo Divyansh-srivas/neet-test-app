@@ -178,7 +178,7 @@ function AppContent() {
         {page === 'exam' && activeTest && <ExamPage test={activeTest} setPage={setPage} setActiveTest={setActiveTest} />}
         {page === 'analysis' && activeTest && <AnalysisPage test={activeTest} setPage={setPage} />}
         {page === 'bookmarks' && <BookmarksPage />}
-        {page === 'library' && <LibraryPage setPage={setPage} setActiveTest={setActiveTest} />}
+        {page === 'library' && <LibraryPage />}
         {page === 'admin-library' && <AdminLibraryPage />}
         {page === 'profile' && <ProfilePage />}
         {page === 'settings' && <SettingsPage />}
