@@ -54,6 +54,7 @@ export default function AdminLibraryPage() {
         }
     }, [selectedChapter]);
 
+    const loadSubjects = async () => {
         try {
             const res = await fetchAPI('/api/admin/library/subjects');
             const data = await res.json();
