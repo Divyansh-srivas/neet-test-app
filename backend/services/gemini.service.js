@@ -50,34 +50,115 @@ export function robustParseQuestions(rawText) {
     return [];
 }
 
+export function isDegenerateOption(text) {
+    if (!text || typeof text !== 'string') return true;
+    const t = text.trim();
+    if (t.length === 0) return true;
+    // Matches "(1)", "1", "(A)", "A", "Option A", "1.", "(2)", "B", etc.
+    return /^[\(\[\{]?([1-4a-dA-D]|option\s*[a-d1-4])[\)\]\}]?\.?$/i.test(t);
+}
+
+export function extractOptionsFromStemIfPresent(questionText) {
+    if (!questionText || typeof questionText !== 'string') return null;
+    
+    // Look for (1) ... (2) ... (3) ... (4) or (a) ... (b) ... (c) ... (d) or 1. ... 2. ...
+    const numPattern = /(?:^|\n|\s+)\(?1\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?2\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?3\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?4\)[\.\:\s]+([\s\S]+)$/i;
+    const letterPattern = /(?:^|\n|\s+)\(?A\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?B\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?C\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?D\)[\.\:\s]+([\s\S]+)$/i;
+    
+    let match = questionText.match(numPattern);
+    if (!match) match = questionText.match(letterPattern);
+    
+    if (match) {
+        const cleanedStem = questionText.slice(0, match.index).trim();
+        return {
+            cleanedStem: cleanedStem.length > 10 ? cleanedStem : questionText,
+            options: {
+                A: match[1].trim(),
+                B: match[2].trim(),
+                C: match[3].trim(),
+                D: match[4].trim()
+            }
+        };
+    }
+    return null;
+}
+
 export function normalizeQuestions(rawQuestions) {
     if (!Array.isArray(rawQuestions)) return [];
     
     return rawQuestions.map((q, idx) => {
         const qNum = q.questionNumber || q.qNum || q.qNumber || q.id || (idx + 1);
-        const qText = q.questionText || q.question || q.text || "Question text unavailable";
+        let qText = q.questionText || q.question || q.text || "Question text unavailable";
         
-        let optionsArray = [];
-        let optionsObj = {};
+        let optionsObj = { A: '', B: '', C: '', D: '' };
+
+        const mapKeyToABCD = (k) => {
+            if (!k) return null;
+            const str = String(k).trim().toUpperCase().replace(/[\(\)\[\]\{\}\.\:\s]/g, '');
+            if (['A', 'B', 'C', 'D'].includes(str)) return str;
+            if (str === '1') return 'A';
+            if (str === '2') return 'B';
+            if (str === '3') return 'C';
+            if (str === '4') return 'D';
+            return null;
+        };
+
+        const cleanOptionText = (text) => {
+            if (typeof text !== 'string') return '';
+            const trimmed = text.trim();
+            if (isDegenerateOption(trimmed)) return trimmed;
+            // Strip redundant leading (1), 1., (A), A., Option A:, etc. when actual text follows
+            const match = trimmed.match(/^[\(\[\{]?([1-4a-dA-D]|option\s*[a-d1-4])[\)\]\}]?[\.\:\-\s]+(.+)$/i);
+            if (match && match[2].trim().length > 0) {
+                return match[2].trim();
+            }
+            return trimmed;
+        };
 
         if (Array.isArray(q.options)) {
-            optionsArray = q.options.map(opt => {
+            const defaultKeys = ['A', 'B', 'C', 'D'];
+            q.options.forEach((opt, optIdx) => {
+                let key = defaultKeys[optIdx] || null;
+                let val = '';
                 if (typeof opt === 'string') {
-                    const key = opt.charAt(0).toUpperCase();
-                    const text = opt.slice(1).replace(/^[\.\:\)\s]+/, '').trim();
-                    optionsObj[key] = text;
-                    return { id: key, text };
-                } else if (opt && (opt.id || opt.key)) {
-                    const key = (opt.id || opt.key).toString().toUpperCase();
-                    const text = opt.text || opt.value || '';
-                    optionsObj[key] = text;
-                    return { id: key, text };
+                    const match = opt.match(/^[\(\[\{]?([1-4a-dA-D])[\)\]\}]?[\.\:\-\s]+(.*)$/);
+                    if (match) {
+                        const parsedKey = mapKeyToABCD(match[1]);
+                        if (parsedKey) key = parsedKey;
+                        val = match[2].trim();
+                    } else {
+                        val = opt.trim();
+                    }
+                } else if (opt && typeof opt === 'object') {
+                    const parsedKey = mapKeyToABCD(opt.id || opt.key || opt.label);
+                    if (parsedKey) key = parsedKey;
+                    val = opt.text || opt.value || opt.content || '';
                 }
-                return opt;
+                if (key) {
+                    optionsObj[key] = cleanOptionText(val);
+                }
             });
         } else if (typeof q.options === 'object' && q.options !== null) {
-            optionsObj = q.options;
-            optionsArray = Object.entries(q.options).map(([key, val]) => ({ id: key, text: val }));
+            for (const [k, v] of Object.entries(q.options)) {
+                const targetKey = mapKeyToABCD(k);
+                if (targetKey) {
+                    const strVal = typeof v === 'string' ? v : (v?.text || String(v || ''));
+                    optionsObj[targetKey] = cleanOptionText(strVal);
+                }
+            }
+        }
+
+        // Check if options are completely empty or degenerate bare labels
+        const allDegenerate = ['A', 'B', 'C', 'D'].every(k => isDegenerateOption(optionsObj[k]));
+        if (allDegenerate) {
+            // Check if options were included in the questionText
+            const recovered = extractOptionsFromStemIfPresent(qText);
+            if (recovered && !['A', 'B', 'C', 'D'].every(k => isDegenerateOption(recovered.options[k]))) {
+                optionsObj = recovered.options;
+                if (recovered.cleanedStem) {
+                    qText = recovered.cleanedStem;
+                }
+            }
         }
 
         if (!optionsObj.A) { optionsObj.A = 'Option A'; }
@@ -85,7 +166,10 @@ export function normalizeQuestions(rawQuestions) {
         if (!optionsObj.C) { optionsObj.C = 'Option C'; }
         if (!optionsObj.D) { optionsObj.D = 'Option D'; }
 
-        const correctAnswer = (q.correctAnswer || q.correct || q.answer || 'A').toString().toUpperCase().trim();
+        const optionsArray = Object.entries(optionsObj).map(([key, val]) => ({ id: key, text: val }));
+
+        const rawCorrect = (q.correctAnswer || q.correct || q.answer || 'A').toString().trim();
+        const correctAnswer = mapKeyToABCD(rawCorrect) || rawCorrect.toUpperCase() || 'A';
         const hasDiagram = !!(q.hasDiagram || q.diagramBox || q.imageBox || q.diagramUrl);
         const hasVisualOptions = !!(q.hasVisualOptions || q.optionImageBoxes);
 
@@ -187,6 +271,75 @@ async function verifyCrop(imageUrl, aiClient, qData) {
     }
 }
 
+export async function recoverDegenerateOptions(pagePdfBuffer, questionsWithBadOptions, aiClient, modelName = 'gemini-3.6-flash') {
+    if (!questionsWithBadOptions || questionsWithBadOptions.length === 0) return {};
+    
+    logger.info(`[GEMINI RECOVERY] Attempting targeted option recovery for ${questionsWithBadOptions.length} questions: ${questionsWithBadOptions.map(q => 'Q' + (q.questionNumber || q.qNum)).join(', ')}`);
+    
+    const base64Pdf = pagePdfBuffer.toString('base64');
+    const qListText = questionsWithBadOptions.map(q => {
+        return `Question ${q.questionNumber || q.qNum}: "${(q.questionText || q.question || '').slice(0, 200)}"`;
+    }).join('\n\n');
+
+    const recoveryPrompt = `You are an expert exam digitizer.
+The following questions from this PDF page had their answer options mistakenly extracted as bare numbers or labels (such as "(1)", "(2)", "(3)", "(4)"):
+
+${qListText}
+
+CRITICAL TASK:
+Inspect the PDF page and extract the COMPLETE text, chemical reactions, mathematical equations, or formulas for options A, B, C, and D for each question listed above.
+- Every option MUST contain the full chemical reaction, equation, formula, or text (e.g. "S_reduced + S'_oxidised -> S_oxidised + S'_reduced", "C(X)-C(Y) -> X - Y + C = C").
+- NEVER return bare numbers or labels like "(1)", "(2)", "(3)", "(4)" or empty strings.
+- Map (1) -> "A", (2) -> "B", (3) -> "C", (4) -> "D".
+
+Output a valid JSON array of objects with schema:
+[
+  {
+    "questionNumber": 132,
+    "options": {
+      "A": "full chemical reaction or text for option 1",
+      "B": "full chemical reaction or text for option 2",
+      "C": "full chemical reaction or text for option 3",
+      "D": "full chemical reaction or text for option 4"
+    }
+  }
+]`;
+
+    try {
+        const response = await Promise.race([
+            aiClient.models.generateContent({
+                model: modelName,
+                contents: [
+                    { inlineData: { data: base64Pdf, mimeType: 'application/pdf' } },
+                    recoveryPrompt
+                ],
+                config: {
+                    responseMimeType: 'application/json'
+                }
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('RECOVERY_TIMEOUT')), 45000))
+        ]);
+
+        if (response && response.text) {
+            const parsed = robustParseQuestions(response.text.trim());
+            const resultMap = {};
+            if (Array.isArray(parsed)) {
+                for (const item of parsed) {
+                    const qn = item.questionNumber || item.qNum;
+                    if (qn && item.options && typeof item.options === 'object') {
+                        resultMap[qn] = item.options;
+                    }
+                }
+            }
+            logger.info(`[GEMINI RECOVERY] Successfully recovered options for: ${Object.keys(resultMap).join(', ')}`);
+            return resultMap;
+        }
+    } catch (err) {
+        logger.warn(`[GEMINI RECOVERY] Option recovery pass failed: ${err.message}`);
+    }
+    return {};
+}
+
 export const extractQuestionsFromSinglePage = async (pagePdfBuffer, testId = 'temp', filePath, startPage, endPage, language = 'English') => {
     const base64Pdf = pagePdfBuffer.toString('base64');
     const sizeKB = Math.round(base64Pdf.length / 1024);
@@ -203,7 +356,11 @@ Analyze this SINGLE PAGE PDF document and extract EVERY SINGLE multiple choice q
 
 MANDATORY RULES:
 ${languageRule}
-2. NORMALIZE OPTIONS: Map all option identifiers to "A", "B", "C", "D" (even if printed as 1, 2, 3, 4 or a, b, c, d).
+2. NORMALIZE OPTIONS (MANDATORY & ABSOLUTE):
+   - Map all option identifiers to keys "A", "B", "C", "D" (even if printed in the PDF as 1, 2, 3, 4 or a, b, c, d).
+   - MANDATORY FULL OPTION CONTENT: Every single option ("A", "B", "C", "D") MUST contain the full, complete text, chemical equation, mathematical formula, reaction, or description.
+   - STRICTLY FORBIDDEN: NEVER, under ANY circumstances, output just the option label (such as "(1)", "(2)", "(3)", "(4)" or "1", "2", "3", "4" or "(A)", "(B)", "(C)", "(D)") as the option text. Stripping option text down to bare numbers or labels completely ruins the test question and is a FATAL ERROR!
+   - CHEMICAL REACTIONS & FORMULAS ARE TEXT/LATEX: All chemical reactions, formulas, equations, pathways, and mechanisms (e.g., "$S_{reduced} + S'_{oxidised} \\rightarrow S_{oxidised} + S'_{reduced}$", "$S - G + S' \\rightarrow S + S' - G$", "$C(X)-C(Y) \\rightarrow X - Y + C = C$", "$S' - S + H_2O \\rightarrow S' + S$") MUST ALWAYS be transcribed into the option text as LaTeX or clear formulas. NEVER classify text-based chemical reactions as visual diagrams or replace them with "(1)", "(2)", "(3)", "(4)".
 3. LATEX FORMULAS — each mathematical expression must have its OWN separate $...$ pair. NEVER let English words appear inside $...$.
    - CORRECT: "the dimensions of $\\frac{A}{B}$ and $\\frac{C}{D}$ are"  (two separate pairs, space between them)
    - WRONG:   "the dimensions of$\\frac{A}{B}and\\frac{C}{D}$are"         (words fused inside one $...$ — FORBIDDEN)
@@ -216,31 +373,41 @@ ${languageRule}
 5. MATCH THE FOLLOWING / COLUMN-MATCHING QUESTIONS: Format as numbered plain-text lines. NEVER use pipe characters (|) or markdown table syntax (:---) for ANY reason.
    - CORRECT: "Match the following:\n1. Mitochondria - Powerhouse\n2. Ribosome - Protein synthesis"
    - WRONG:   "Column I | Column II\n:---|:---\nMitochondria | Powerhouse"   (pipe/markdown FORBIDDEN)
-6. DIAGRAMS & FIGURES (CRITICAL FOR CHEMISTRY): You MUST set 'imageBox' and "hasDiagram": true whenever a question or option contains an actual VISUAL element. This includes: photographs, graphs, anatomical figures, circuit diagrams, AND ESPECIALLY chemical structures.
-   - DENSE INLINE CHEMICAL STRUCTURES: In IUPAC/Organic Chemistry questions, chemical structures are often small, dense, and placed inline (e.g., branched chains like CH3-CH(OH)-..., skeletal structures, benzene rings). These ARE diagrams. You MUST extract an imageBox for them. NEVER try to transcribe a complex 2D branched chemical structure purely as text if it relies on vertical bonds or rings — treat it as a diagram.
-   - CRITICAL BOUNDING BOX RULE: Your imageBox must capture EXACTLY the figure content needed to answer the question — nothing less, nothing more.
-     * INCLUDE: the diagram/graph/circuit/chemical structure/table itself, all its internal labels, axis values, numbers, component values.
-     * For the question-level imageBox: ONLY include a diagram that appears in the question STEM (above the options). DO NOT include option diagrams here.
-     * EXCLUDE (CRITICAL): The question's own stem text repeated above the figure, headers, footers, institute names, date stamps, "Space for Rough Work", and anything from adjacent questions.
+6. DIAGRAMS & FIGURES: You MUST set 'imageBox' and "hasDiagram": true whenever a question contains an actual VISUAL element (photographs, graphs, anatomical figures, circuit diagrams, complex 2D molecular rings).
+   - STEM BOUNDING BOX:
+     * INCLUDE: the diagram/graph/circuit/structure itself, all its internal labels, axis values, numbers, component values.
+     * EXCLUDE (CRITICAL): The question's own stem text repeated above the figure, headers, footers, institute names, date stamps, "Space for Rough Work", and adjacent questions.
      * DO NOT let the bounding box touch ANY text that is part of the question itself.
-     * EXCEPTION FOR INLINE STRUCTURES: If a dense chemical structure is embedded inline directly next to the question text, you MAY include the immediately adjacent text in the bounding box if separating them is impossible.
 
-   - VISUAL OPTIONS (CRITICAL NEW RULE): If answer options ARE diagrams/images (e.g., 4 chemical structures, 4 graphs, 4 circuit diagrams labeled A/B/C/D or (1)/(2)/(3)/(4)), you MUST:
+   - PURE VISUAL OPTIONS (Only when options are drawings/graphs with NO text, e.g. 4 graphs, 4 circuit diagrams, or complex ring structures):
      a) Set "hasVisualOptions": true
-     b) Set the option text for each option to just the label: "(1)", "(2)", "(3)", "(4)" or whatever label is printed
+     b) In the "options" object: ALWAYS transcribe the formula, name, or description (e.g. "$S_{reduced} + S'_{oxidised} \\rightarrow S_{oxidised} + S'_{reduced}$", "Graph: Linear increase", etc.). NEVER output just "(1)", "(2)", "(3)", "(4)" alone!
      c) Set "optionImageBoxes" with a SEPARATE tight bounding box for EACH individual option diagram:
-        - "A": { "page": 1, "box": [ymin, xmin, ymax, xmax] }  ← crops ONLY option A's diagram
-        - "B": { "page": 1, "box": [ymin, xmin, ymax, xmax] }  ← crops ONLY option B's diagram
-        - "C": { "page": 1, "box": [ymin, xmin, ymax, xmax] }  ← crops ONLY option C's diagram
-        - "D": { "page": 1, "box": [ymin, xmin, ymax, xmax] }  ← crops ONLY option D's diagram
-     d) Each box must be TIGHT around that single option's diagram only — not the label text, not other options.
+        - "A": { "page": 1, "box": [ymin, xmin, ymax, xmax] }
+        - "B": { "page": 1, "box": [ymin, xmin, ymax, xmax] }
+        - "C": { "page": 1, "box": [ymin, xmin, ymax, xmax] }
+        - "D": { "page": 1, "box": [ymin, xmin, ymax, xmax] }
+     d) Each box must be TIGHT around that single option's diagram only.
 
-   - Example A (VISUAL OPTIONS): A question "Which is the correct IUPAC structure?" with 4 chemical structures as options.
-     CORRECT: hasVisualOptions=true, options={A:"(1)",B:"(2)",C:"(3)",D:"(4)"}, optionImageBoxes with 4 separate tight boxes.
-     WRONG: Trying to put all 4 structures in one imageBox or leaving optionImageBoxes null.
+   - Example A (CHEMICAL REACTIONS / FORMULAS IN OPTIONS):
+     Question: "The enzyme whose commission number starts with '4' catalyses the type of reaction exemplified by"
+     Options printed in paper:
+     (1) S_reduced + S'_oxidised -> S_oxidised + S'_reduced
+     (2) S-G + S' -> S + S'-G
+     (3) C-C -> X-Y + C=C
+     (4) S'-S + H2O -> S'+S
+     CORRECT:
+     options: {
+       "A": "$S_{reduced} + S'_{oxidised} \\rightarrow S_{oxidised} + S'_{reduced}$",
+       "B": "$S - G + S' \\rightarrow S + S' - G$",
+       "C": "C(X)-C(Y) $\\rightarrow$ X - Y + C = C",
+       "D": "$S' - S + H_2O \\rightarrow S' + S$"
+     }
+     hasVisualOptions: false, optionImageBoxes: null.
+     WRONG: Setting options to {A: "(1)", B: "(2)", C: "(3)", D: "(4)"} — THIS IS COMPLETELY FORBIDDEN!
 
-   - Example B (STEM DIAGRAM + TEXT OPTIONS): A circuit diagram in the question with text options below.
-     CORRECT: imageBox around the circuit only, no optionImageBoxes (options are text).
+   - Example B (STEM DIAGRAM + TEXT OPTIONS): A circuit diagram in the question stem with text/formula options below.
+     CORRECT: imageBox around the circuit diagram only, no optionImageBoxes (options are text/formulas).
 
    - Do NOT set imageBox for text-only tables, assertion tables, or column-matching text. If valid, use "imageBox": { "page": 1, "box": [0.12, 0.5, 0.45, 0.9] } (scale 0-1) and "hasDiagram": true. Note that "page" MUST be the 1-indexed page number WITHIN the PDF chunk provided (e.g. 1 or 2).
 7. JSON ESCAPING: Correctly escape all backslashes. To output $\\frac{1}{2}$ write "$\\\\frac{1}{2}$" in the JSON string. Do NOT output raw control characters.
@@ -512,6 +679,49 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                 throw new Error("UNREPAIRABLE_CONTROL_CHARACTERS_FOUND");
             }
             const normalized = normalizeQuestions(safeParsedRaw);
+
+            // Degenerate Option Detection & Auto-Recovery
+            const questionsWithBadOptions = normalized.filter(q => {
+                const opts = Object.values(q.options || {});
+                const allBad = opts.length === 0 || opts.every(opt => isDegenerateOption(opt));
+                const hasValidOptionBoxes = q.hasVisualOptions && q.optionImageBoxes && Object.keys(q.optionImageBoxes).length >= 4;
+                return allBad && !hasValidOptionBoxes;
+            });
+
+            if (questionsWithBadOptions.length > 0) {
+                logger.warn(`[GEMINI NATIVE] Found ${questionsWithBadOptions.length} questions with degenerate options (bare numbers/labels). Triggering targeted recovery...`);
+                try {
+                    const recoveredMap = await recoverDegenerateOptions(pagePdfBuffer, questionsWithBadOptions, ai, modelName);
+                    for (const q of normalized) {
+                        const qn = q.questionNumber || q.qNum;
+                        if (recoveredMap[qn]) {
+                            const recOpts = recoveredMap[qn];
+                            for (const k of ['A', 'B', 'C', 'D']) {
+                                if (recOpts[k] && !isDegenerateOption(recOpts[k])) {
+                                    q.options[k] = recOpts[k];
+                                    if (q.optionsList && q.optionsList.find(o => o.id === k)) {
+                                        q.optionsList.find(o => o.id === k).text = recOpts[k];
+                                    }
+                                }
+                            }
+                            logger.info(`[GEMINI NATIVE] Applied recovered options to Q${qn}`);
+                        }
+                    }
+                } catch (recErr) {
+                    logger.warn(`[GEMINI NATIVE] Option recovery pass failed: ${recErr.message}`);
+                }
+            }
+
+            // Fallback safety: If options are still degenerate and have no images, ensure hasDiagram is enabled
+            for (const q of normalized) {
+                const opts = Object.values(q.options || {});
+                const isStillDegenerate = opts.length === 0 || opts.every(opt => isDegenerateOption(opt));
+                const hasOptionImages = q.hasVisualOptions && (q.optionImageBoxes || q.optionImageUrls);
+                if (isStillDegenerate && !hasOptionImages) {
+                    logger.warn(`[GEMINI NATIVE] Q${q.questionNumber || q.qNum} options still degenerate after recovery! Ensuring hasDiagram=true so visual content is available.`);
+                    q.hasDiagram = true;
+                }
+            }
 
             // REQUIREMENT 2: Post-extraction language script validation
             let languageMismatch = false;

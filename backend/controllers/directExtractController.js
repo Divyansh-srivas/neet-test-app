@@ -149,6 +149,28 @@ export const uploadAndExtractDirect = async (req, res) => {
                                                 logger.warn(`Failed to crop diagram for p${pageNum} q${q.qNum}: ${cropErr.message}`);
                                             }
                                         }
+
+                                        if (q.hasVisualOptions && q.optionImageBoxes && typeof q.optionImageBoxes === 'object') {
+                                            q.optionImageUrls = {};
+                                            for (const [optKey, optBox] of Object.entries(q.optionImageBoxes)) {
+                                                if (!optBox || !optBox.box) continue;
+                                                try {
+                                                    const { cropPdfRegionToImage } = await import('../services/crop.service.js');
+                                                    const optBuffer = await cropPdfRegionToImage(pageBuffer, optBox.box);
+                                                    const optFileName = `diagrams/${jobId}_p${pageNum}_q${q.qNum}_opt${optKey}_${Date.now()}.png`;
+                                                    const { error: optUploadErr } = await supabaseAdmin.storage
+                                                        .from('uploads')
+                                                        .upload(optFileName, optBuffer, { contentType: 'image/png', upsert: true });
+                                                    if (!optUploadErr) {
+                                                        const { data: optUrlData } = supabaseAdmin.storage.from('uploads').getPublicUrl(optFileName);
+                                                        q.optionImageUrls[optKey] = optUrlData.publicUrl;
+                                                    }
+                                                } catch (optCropErr) {
+                                                    logger.warn(`Failed to crop option image for p${pageNum} q${q.qNum} opt ${optKey}: ${optCropErr.message}`);
+                                                }
+                                            }
+                                            if (Object.keys(q.optionImageUrls).length === 0) q.optionImageUrls = null;
+                                        }
                                     });
                                     
                                     await Promise.all(cropPromises);
@@ -166,7 +188,9 @@ export const uploadAndExtractDirect = async (req, res) => {
                                             options: q.options,
                                             correct_option: q.correct,
                                             explanation: q.explanation,
-                                            diagram_url: q.diagramUrl || null
+                                            diagram_url: q.diagramUrl || null,
+                                            option_image_urls: q.optionImageUrls || null,
+                                            has_visual_options: q.hasVisualOptions || false
                                         });
                                     }
                                     

@@ -231,6 +231,32 @@ export const createAiWorker = (io) => {
                         }
                     }
 
+                    // Rule 4 — Degenerate Option Interceptor
+                    // Fires if options are bare labels like "(1)", "(2)", "(3)", "(4)" or empty
+                    if (q.options && typeof q.options === 'object') {
+                        const opts = Object.values(q.options);
+                        const isDegenerate = (s) => !s || typeof s !== 'string' || /^[\(\[\{]?([1-4a-dA-D]|option\s*[a-d1-4])[\)\]\}]?\.?$/i.test(s.trim());
+                        if (opts.length > 0 && opts.every(isDegenerate)) {
+                            // Check if options leaked into question / questionText
+                            const stem = q.question || q.questionText || '';
+                            const numPattern = /(?:^|\n|\s+)\(?1\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?2\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?3\)[\.\:\s]+([\s\S]+?)(?:^|\n|\s+)\(?4\)[\.\:\s]+([\s\S]+)$/i;
+                            const match = stem.match(numPattern);
+                            if (match) {
+                                q.options.A = match[1].trim();
+                                q.options.B = match[2].trim();
+                                q.options.C = match[3].trim();
+                                q.options.D = match[4].trim();
+                                const cleaned = stem.slice(0, match.index).trim();
+                                if (cleaned.length > 15) {
+                                    q.question = cleaned;
+                                    q.questionText = cleaned;
+                                }
+                                logger.info(`[REPAIR INTRV] qNum=${q.qNum} rule=DEGENERATE_OPTIONS_EXTRACTED_FROM_STEM`);
+                                changed = true;
+                            }
+                        }
+                    }
+
                     return q;
                 };
 

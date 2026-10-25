@@ -12,6 +12,22 @@ import MathText from '../components/MathText'
 
 const TOTAL_SECONDS = 3 * 60 * 60
 
+const formatOptionText = (text, opt, hasDiagram) => {
+  if (!text || typeof text !== 'string') return `Option ${opt}`;
+  const trimmed = text.trim();
+  const match = trimmed.match(/^[\(\[\{]?([1-4a-dA-D]|option\s*[a-d1-4])[\)\]\}]?[\.\:\-\s]+(.+)$/i);
+  if (match && match[2].trim().length > 0) {
+    return match[2].trim();
+  }
+  if (/^[\(\[\{]?[1-4a-dA-D][\)\]\}]?\.?$/.test(trimmed)) {
+    if (hasDiagram) {
+      return `${trimmed} — (Refer to diagram/question)`;
+    }
+    return `Option ${opt}`;
+  }
+  return trimmed;
+};
+
 export default function ExamPage({ test, setPage, setActiveTest }) {
   const { profile, user } = useAuth()
   const { settings } = useSettings()
@@ -611,7 +627,9 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
                         />
                       </div>
                     ) : (
-                      <span style={{ flex: 1, marginTop: 3 }}><MathText text={q.options?.[opt] || `Option ${opt}`} /></span>
+                      <span style={{ flex: 1, marginTop: 3 }}>
+                        <MathText text={formatOptionText(q.options?.[opt], opt, !!(q.imageUrl || q.diagramUrl))} />
+                      </span>
                     )}
                   </button>
                 )

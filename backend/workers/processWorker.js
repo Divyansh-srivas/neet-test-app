@@ -15,13 +15,50 @@ export const createProcessWorker = (io) => {
             
             // Validate and normalize questions
             const cleanedQuestions = questions.map(q => {
-                let optionsObj = {};
+                let optionsObj = { A: '', B: '', C: '', D: '' };
+                const mapKeyToABCD = (k) => {
+                    if (!k) return null;
+                    const str = String(k).trim().toUpperCase().replace(/[\(\)\[\]\{\}\.\:\s]/g, '');
+                    if (['A', 'B', 'C', 'D'].includes(str)) return str;
+                    if (str === '1') return 'A';
+                    if (str === '2') return 'B';
+                    if (str === '3') return 'C';
+                    if (str === '4') return 'D';
+                    return null;
+                };
+
+                const cleanOptionText = (text) => {
+                    if (typeof text !== 'string') return '';
+                    const trimmed = text.trim();
+                    const match = trimmed.match(/^[\(\[\{]?([1-4a-dA-D]|option\s*[a-d1-4])[\)\]\}]?[\.\:\-\s]+(.+)$/i);
+                    if (match && match[2].trim().length > 0) {
+                        return match[2].trim();
+                    }
+                    return trimmed;
+                };
+
                 if (Array.isArray(q.options)) {
-                    q.options.forEach(opt => {
-                        if (opt && opt.id) optionsObj[opt.id] = opt.text || '';
+                    const defaultKeys = ['A', 'B', 'C', 'D'];
+                    q.options.forEach((opt, optIdx) => {
+                        let key = defaultKeys[optIdx] || null;
+                        let val = '';
+                        if (typeof opt === 'string') {
+                            val = opt;
+                        } else if (opt && typeof opt === 'object') {
+                            const parsedKey = mapKeyToABCD(opt.id || opt.key || opt.label);
+                            if (parsedKey) key = parsedKey;
+                            val = opt.text || opt.value || opt.content || '';
+                        }
+                        if (key) optionsObj[key] = cleanOptionText(val);
                     });
                 } else if (typeof q.options === 'object' && q.options !== null) {
-                    optionsObj = q.options;
+                    for (const [k, v] of Object.entries(q.options)) {
+                        const targetKey = mapKeyToABCD(k);
+                        if (targetKey) {
+                            const strVal = typeof v === 'string' ? v : (v?.text || String(v || ''));
+                            optionsObj[targetKey] = cleanOptionText(strVal);
+                        }
+                    }
                 }
                 
                 // Fallback default options if missing
