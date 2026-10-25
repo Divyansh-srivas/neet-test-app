@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { queues } from '../queue/index.js';
 import { ensureLocalFile } from '../services/storageSync.js';
+import { findDeterministicDiagramBox, isFigureRequired } from '../services/diagramDetector.service.js';
 
 // Hard global timeout for image extraction - if it takes more than 90s, skip all images and proceed
 const IMAGE_EXTRACTION_TIMEOUT_MS = 90_000;
@@ -23,6 +24,18 @@ async function extractImagesWithTimeout(pdfBuffer, questions, jobId) {
                 processor = await createPdfImageProcessor(pdfBuffer);
 
                 for (const q of questions) {
+                    // Deterministic diagram recovery failsafe:
+                    // If question mentions a figure/diagram but lacks imageBox, recover it directly from the PDF buffer
+                    if (q && !q.diagramUrl && (!q.imageBox || !q.imageBox.page) && isFigureRequired(q.question || q.questionText)) {
+                        const recovered = findDeterministicDiagramBox(pdfBuffer, q.qNum || q.questionNumber, q.question || q.questionText, -1);
+                        if (recovered && recovered.page) {
+                            q.hasDiagram = true;
+                            q.imageBox = { page: recovered.page, box: recovered };
+                            q.diagramBox = q.imageBox;
+                            logger.info(`[imageProcessor] Deterministically recovered missing diagram for Q${q.qNum || q.questionNumber}: page ${recovered.page}, box=[${recovered.join(', ')}]`);
+                        }
+                    }
+
                     // 1. Crop the main question diagram (stem image)
                     if (q && q.imageBox && q.imageBox.page) {
                         try {

@@ -3,6 +3,7 @@ import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { cropAndUploadDiagram } from './densityTrimmer.js';
 import { splitPdfIntoChunk } from './pdf.service.js';
+import { findDeterministicDiagramBox, isFigureRequired } from './diagramDetector.service.js';
 
 const ai = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
 
@@ -373,11 +374,19 @@ ${languageRule}
 5. MATCH THE FOLLOWING / COLUMN-MATCHING QUESTIONS: Format as numbered plain-text lines. NEVER use pipe characters (|) or markdown table syntax (:---) for ANY reason.
    - CORRECT: "Match the following:\n1. Mitochondria - Powerhouse\n2. Ribosome - Protein synthesis"
    - WRONG:   "Column I | Column II\n:---|:---\nMitochondria | Powerhouse"   (pipe/markdown FORBIDDEN)
-6. DIAGRAMS & FIGURES: You MUST set 'imageBox' and "hasDiagram": true whenever a question contains an actual VISUAL element (photographs, graphs, anatomical figures, circuit diagrams, complex 2D molecular rings).
+6. DIAGRAMS & FIGURES: You MUST set 'imageBox' and "hasDiagram": true whenever a question contains an actual VISUAL element (photographs, graphs, anatomical figures, circuit diagrams, complex 2D molecular structures, pedigree charts).
+   - MANDATORY TRIGGER: If the question text contains ANY phrase referring to a visual figure/diagram, including:
+     * "figure given above" / "figure given below" / "given figure" / "shown in the figure"
+     * "in the diagram" / "in the given graph" / "refer to the diagram" / "observe the following figure"
+     * "step 'X' / 'Y' / 'Z'" / "identify each step" / "labelled as A, B, C" / "in the following pedigree"
+     THEN setting "hasDiagram": true and providing a valid, tight "imageBox" is STRICTLY MANDATORY! Returning hasDiagram: false or imageBox: null for these questions is a FATAL ERROR.
+   - DIAGRAM POSITION (CRITICAL):
+     * DIAGRAM ABOVE STEM TEXT: In many exam questions (especially Biology & Physics), the diagram is placed DIRECTLY ABOVE the question sentence (between the question number like '155.' and the sentence 'The figure given above represents...'). You MUST extract the imageBox for this diagram! The box spans between the question number anchor and the stem sentence. DO NOT omit it because it is above the text sentence!
+     * DIAGRAM BELOW STEM TEXT: The diagram is placed between the question sentence and the options.
    - STEM BOUNDING BOX:
-     * INCLUDE: the diagram/graph/circuit/structure itself, all its internal labels, axis values, numbers, component values.
-     * EXCLUDE (CRITICAL): The question's own stem text repeated above the figure, headers, footers, institute names, date stamps, "Space for Rough Work", and adjacent questions.
-     * DO NOT let the bounding box touch ANY text that is part of the question itself.
+     * INCLUDE: the diagram/graph/circuit/structure itself, all its internal labels (e.g. ds DNA, Primers, X, Y, Z, P, Amplified DNA), axis values, arrows, and numbers.
+     * EXCLUDE (CRITICAL): Headers, footers, page numbers, institute watermarks, and adjacent questions.
+     * DO NOT let the bounding box touch the question stem sentence itself.
 
    - PURE VISUAL OPTIONS (Only when options are drawings/graphs with NO text, e.g. 4 graphs, 4 circuit diagrams, or complex ring structures):
      a) Set "hasVisualOptions": true
@@ -720,6 +729,28 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
                 if (isStillDegenerate && !hasOptionImages) {
                     logger.warn(`[GEMINI NATIVE] Q${q.questionNumber || q.qNum} options still degenerate after recovery! Ensuring hasDiagram=true so visual content is available.`);
                     q.hasDiagram = true;
+                }
+            }
+
+            // DETERMINISTIC DIAGRAM RECOVERY PASS:
+            // If question mentions a figure/diagram but Gemini didn't return imageBox or set hasDiagram: false,
+            // recover the exact diagram bounding box using MuPDF structured text geometry.
+            for (const q of normalized) {
+                const qNum = q.questionNumber || q.qNum;
+                const stem = q.questionText || q.question || '';
+                const needsDiagram = isFigureRequired(stem);
+
+                if (needsDiagram && (!q.hasDiagram || !q.imageBox)) {
+                    logger.info(`[GEMINI NATIVE] Q${qNum} mentions figure/diagram but lacks imageBox. Running deterministic diagram detector...`);
+                    const detectedBox = findDeterministicDiagramBox(pagePdfBuffer, qNum, stem, 0);
+                    if (detectedBox) {
+                        q.hasDiagram = true;
+                        q.imageBox = { page: 1, box: detectedBox };
+                        q.diagramBox = q.imageBox;
+                        logger.info(`[GEMINI NATIVE] Successfully recovered diagramBox for Q${qNum}: [${detectedBox.join(', ')}]`);
+                    } else {
+                        logger.warn(`[GEMINI NATIVE] Q${qNum} mentions figure, but no diagram gap found on page.`);
+                    }
                 }
             }
 

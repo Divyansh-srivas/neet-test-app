@@ -211,9 +211,9 @@ export default function AnalysisPage({ test, setPage }) {
                       </span>
                     </div>
                     <p style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.5 }}><MathText text={q.question} /></p>
-                    {(q.imageUrl || q.diagramUrl) ? (
+                    {(q.imageUrl || q.diagramUrl || q.diagram) ? (
                       <div style={{ marginTop: 8 }}>
-                        <img src={q.imageUrl || q.diagramUrl} alt="Diagram" style={{ maxHeight: 120, borderRadius: 4, border: '1px solid var(--border)' }} />
+                        <img src={q.imageUrl || q.diagramUrl || q.diagram} alt="Diagram" style={{ maxHeight: 140, borderRadius: 6, border: '1px solid var(--border)', background: '#ffffff', padding: 4, display: 'inline-block' }} />
                       </div>
                     ) : null}
                     <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12 }}>

@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { getTotalPages, splitPdfDocIntoChunk } from '../services/pdf.service.js';
 import { PDFDocument } from 'pdf-lib';
 import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
+import { findDeterministicDiagramBox, isFigureRequired } from '../services/diagramDetector.service.js';
 import { config } from '../config/env.js';
 import fs from 'fs';
 
@@ -129,6 +130,17 @@ export const uploadAndExtractDirect = async (req, res) => {
                                     
                                     // 2. Process Diagram Cropping (Non-blocking array)
                                     const cropPromises = questions.map(async (q) => {
+                                        // Deterministic recovery failsafe: If question mentions figure but lacks diagramBox
+                                        if ((!q.hasDiagram || !q.diagramBox) && isFigureRequired(q.question)) {
+                                            const recoveredBox = findDeterministicDiagramBox(pageBuffer, q.qNum, q.question, 0);
+                                            if (recoveredBox) {
+                                                q.hasDiagram = true;
+                                                q.diagramBox = { ymin: recoveredBox[0], xmin: recoveredBox[1], ymax: recoveredBox[2], xmax: recoveredBox[3], page: 1 };
+                                                q.imageBox = { page: 1, box: recoveredBox };
+                                                logger.info(`[DIRECT] Deterministically recovered missing diagram for Q${q.qNum}: [${recoveredBox.join(', ')}]`);
+                                            }
+                                        }
+
                                         if (q.hasDiagram && q.diagramBox) {
                                             try {
                                                 const { cropPdfRegionToImage } = await import('../services/crop.service.js');

@@ -585,23 +585,32 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
               </div>
             </div>
 
-            {/* Question Text */}
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, marginBottom: 24, lineHeight: 1.7, fontSize: questionFontSize }}>
-              <MathText text={q.question} />
-              {(q.imageUrl || q.diagramUrl) ? (
-                <div style={{ marginTop: 20, textAlign: 'center', position: 'relative', display: 'inline-block' }}>
+            {/* Question Text & Diagram */}
+            {(() => {
+              const diagSrc = q.imageUrl || q.diagramUrl || q.diagram;
+              const isDiagramAbove = diagSrc && /\b(figure\s+(given\s+)?above|above\s+figure)\b/i.test(q.question || '');
+              const diagramNode = diagSrc ? (
+                <div style={{ marginTop: isDiagramAbove ? 0 : 20, marginBottom: isDiagramAbove ? 20 : 0, textAlign: 'center', position: 'relative', display: 'inline-block' }}>
                   <img 
-                    src={q.imageUrl || q.diagramUrl} 
+                    src={diagSrc} 
                     alt="Question Diagram" 
-                    onClick={() => setZoomedImage(q.imageUrl || q.diagramUrl)}
-                    style={{ maxWidth: '100%', maxHeight: 400, borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }} 
+                    onClick={() => setZoomedImage(diagSrc)}
+                    style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in', background: '#ffffff', padding: 6, display: 'block' }} 
                   />
-                  <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(0,0,0,0.6)', color: 'white', padding: '4px 8px', borderRadius: 6, fontSize: 11, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ position: 'absolute', bottom: 12, right: 12, background: 'rgba(0,0,0,0.65)', color: 'white', padding: '4px 8px', borderRadius: 6, fontSize: 11, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <ZoomIn size={14} /> Click to zoom
                   </div>
                 </div>
-              ) : null}
-            </div>
+              ) : null;
+
+              return (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, marginBottom: 24, lineHeight: 1.7, fontSize: questionFontSize }}>
+                  {isDiagramAbove && diagramNode && <div style={{ textAlign: 'center' }}>{diagramNode}</div>}
+                  <MathText text={q.question} />
+                  {!isDiagramAbove && diagramNode && <div style={{ textAlign: 'center' }}>{diagramNode}</div>}
+                </div>
+              );
+            })()}
 
             {/* Options */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
