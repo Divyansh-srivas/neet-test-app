@@ -95,7 +95,7 @@ export const createPdfWorker = (io) => {
                     
                     if (matchingJobs && matchingJobs.length > 0) {
                         const matchingJob = matchingJobs[0];
-                        if (matchingJob.metadata?.promptVersion === 'v4' && !job.data.forceReextract) {
+                        if (matchingJob.metadata?.promptVersion === 'v4' && !matchingJob.metadata?.needsReview && !job.data.forceReextract) {
                             logger.info(`[DEDUPE] Found completed job ${matchingJob.id} for hash ${fileHash}. Bypassing AI.`);
                             
                             // Send directly to saveWorker or clone here?

@@ -1,7 +1,43 @@
 import * as mupdf from 'mupdf';
 import { logger } from '../utils/logger.js';
 
-const FIGURE_NOUNS = '(?:diagrams?|figures?|figs?\\.?|graphs?|charts?|flow\\s*charts?|pie\\s*charts?|schematics?|circuits?)';
+// ─── BUG 1c FIX: WeakMap cache for mupdf doc + per-page parsed text ───
+// Avoids re-parsing the same PDF buffer on every call.
+const _docCache = new WeakMap();  // Buffer → { doc, pages: Map<pageIdx, {blocks, pw, ph}> }
+
+function getCachedDoc(pdfBuffer) {
+    let cached = _docCache.get(pdfBuffer);
+    if (cached) return cached;
+    const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf');
+    cached = { doc, pages: new Map() };
+    _docCache.set(pdfBuffer, cached);
+    return cached;
+}
+
+function getCachedPage(pdfBuffer, pageIdx) {
+    const { doc, pages } = getCachedDoc(pdfBuffer);
+    if (pages.has(pageIdx)) return pages.get(pageIdx);
+    const totalPages = doc.countPages();
+    if (pageIdx < 0 || pageIdx >= totalPages) return null;
+    const page = doc.loadPage(pageIdx);
+    const b = page.getBounds();
+    const pw = b[2] - b[0];
+    const ph = b[3] - b[1];
+    if (pw <= 0 || ph <= 0) return null;
+    const st = page.toStructuredText();
+    const json = JSON.parse(st.asJSON());
+    const blocks = json.blocks || [];
+    const result = { blocks, pw, ph };
+    pages.set(pageIdx, result);
+    return result;
+}
+
+function getTotalPages(pdfBuffer) {
+    const { doc } = getCachedDoc(pdfBuffer);
+    return doc.countPages();
+}
+
+const FIGURE_NOUNS = '(?:diagrams?|figures?|figs?\\.?|graphs?|charts?|flow\\s*charts?|pie\\s*charts?|schematics?|circuits?|body\\s*plans?)';
 
 export const FIGURE_INTENT_REGEX = new RegExp(
     '\\b(' + [
@@ -36,7 +72,7 @@ export function hasDegenerateOrVisualOptions(options, stem = '') {
         const vals = Object.values(options).map(v => typeof v === 'string' ? v.trim() : String(v || '').trim());
         if (vals.length === 0) return true;
         // Strictly bare numbers or degenerate markers like "1.", "(1)", "Option A" with NO real text
-        return vals.every(v => !v || /^(?:(?:\(?\d+\)?|\(?[a-dA-D]\)?|\d+[\.\)]|Option\s+[a-dA-D]))$/i.test(v));
+        return vals.every(v => !v || /^(?:(?:\(?\d+\)?|\(?[a-dA-D]\)?|\d+[\.)]|Option\s+[a-dA-D]))$/i.test(v));
     }
     return false;
 }
@@ -52,82 +88,164 @@ export function isFigureRequired(text, options = null) {
     return false;
 }
 
+// ─── BUG 1a FIX: When pageIndex is -1, collect ALL pages with the anchor
+// and pick the best one using stem keyword overlap. ───
+
+/**
+ * Find the best page for a question number by matching stem keywords.
+ * Returns { pageIdx, anchorLine, blocks, pw, ph } or null.
+ */
+function findBestPageForQuestion(pdfBuffer, parsedQNum, qText) {
+    const totalPages = getTotalPages(pdfBuffer);
+    const qNumPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum}(?:[\\.:;\\s]|$)`, 'i');
+
+    // Collect all pages that have the anchor
+    const candidates = [];
+    for (let pIdx = 0; pIdx < totalPages; pIdx++) {
+        const pageData = getCachedPage(pdfBuffer, pIdx);
+        if (!pageData) continue;
+        const { blocks, pw, ph } = pageData;
+
+        for (const blk of blocks) {
+            if (blk.type === 'text' && blk.lines) {
+                for (const line of blk.lines) {
+                    if (qNumPattern.test(line.text.trim())) {
+                        candidates.push({ pageIdx: pIdx, anchorLine: line, blocks, pw, ph });
+                        break; // first match on this page is enough
+                    }
+                }
+            }
+            if (candidates.length > 0 && candidates[candidates.length - 1].pageIdx === pIdx) break;
+        }
+    }
+
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0];
+
+    // Multiple pages have this question number. Pick the one whose text shares
+    // the most stem keywords (avoids matching "1." on an instructions page).
+    const stemKeywords = (qText || '')
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 4)
+        .slice(0, 10);
+
+    if (stemKeywords.length === 0) {
+        // No keywords to disambiguate — prefer pages after the first (skip instructions)
+        return candidates[candidates.length - 1];
+    }
+
+    let bestCandidate = candidates[0];
+    let bestScore = -1;
+
+    for (const cand of candidates) {
+        // Collect all text on this page
+        let pageText = '';
+        for (const blk of cand.blocks) {
+            if (blk.type === 'text' && blk.lines) {
+                for (const line of blk.lines) {
+                    pageText += ' ' + line.text;
+                }
+            }
+        }
+        const lowerPageText = pageText.toLowerCase();
+        const score = stemKeywords.filter(kw => lowerPageText.includes(kw.toLowerCase())).length;
+        if (score > bestScore) {
+            bestScore = score;
+            bestCandidate = cand;
+        }
+    }
+
+    return bestCandidate;
+}
+
+
 /**
  * Fallback to the single-column band around a question (from anchor to next question in same column).
+ * BUG 1a FIX: accepts optional qText param for keyword-based page disambiguation.
  */
-export function getQuestionColumnBandBox(pdfBuffer, qNum, pageIndex = -1) {
+export function getQuestionColumnBandBox(pdfBuffer, qNum, pageIndex = -1, qText = '') {
     if (!pdfBuffer || !qNum) return null;
     try {
-        const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf');
-        const totalPages = doc.countPages();
+        const totalPages = getTotalPages(pdfBuffer);
         const parsedQNum = parseInt(String(qNum).replace(/\D/g, ''), 10);
         if (!parsedQNum) return null;
 
-        const qNumPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum}(?:[\\.\\:\\s]|$)`, 'i');
-        const nextQPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum + 1}(?:[\\.\\:\\s]|$)`, 'i');
+        const qNumPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum}(?:[\\.:;\\s]|$)`, 'i');
+        const nextQPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum + 1}(?:[\\.:;\\s]|$)`, 'i');
 
-        let targetPages = [];
+        let targetPageIdx, anchorLine, blocks, pw, ph;
+
         if (pageIndex >= 0 && pageIndex < totalPages) {
-            targetPages.push(pageIndex);
-        } else {
-            for (let i = 0; i < totalPages; i++) targetPages.push(i);
-        }
+            // Use specified page
+            const pageData = getCachedPage(pdfBuffer, pageIndex);
+            if (!pageData) return null;
+            ({ blocks, pw, ph } = pageData);
+            targetPageIdx = pageIndex;
 
-        for (const pIdx of targetPages) {
-            const page = doc.loadPage(pIdx);
-            const b = page.getBounds();
-            const pw = b[2] - b[0];
-            const ph = b[3] - b[1];
-            if (pw <= 0 || ph <= 0) continue;
-
-            const st = page.toStructuredText();
-            const json = JSON.parse(st.asJSON());
-            const blocks = json.blocks || [];
-
-            let anchorLine = null;
-            let nextAnchorLine = null;
-
+            // Find anchor on this page
             for (const blk of blocks) {
                 if (blk.type === 'text' && blk.lines) {
                     for (const line of blk.lines) {
-                        const t = line.text.trim();
-                        if (!anchorLine && qNumPattern.test(t)) {
+                        if (qNumPattern.test(line.text.trim())) {
                             anchorLine = line;
-                        } else if (anchorLine && !nextAnchorLine && nextQPattern.test(t)) {
-                            nextAnchorLine = line;
+                            break;
                         }
                     }
                 }
+                if (anchorLine) break;
             }
+        } else {
+            // BUG 1a FIX: use keyword-based page disambiguation
+            const best = findBestPageForQuestion(pdfBuffer, parsedQNum, qText);
+            if (!best) return null;
+            ({ pageIdx: targetPageIdx, anchorLine, blocks, pw, ph } = best);
+        }
 
-            if (anchorLine) {
-                const isLeft = anchorLine.bbox.x < pw * 0.48;
-                const colXmin = isLeft ? 0.02 : 0.48;
-                const colXmax = isLeft ? 0.50 : 0.98;
+        if (!anchorLine) return null;
 
-                // Start slightly above the question anchor line
-                const ymin = Math.max(0.06, (anchorLine.bbox.y / ph) - 0.01);
-
-                let ymax = 0.92; // default page bottom before footer
-                if (nextAnchorLine) {
-                    const nextIsLeft = nextAnchorLine.bbox.x < pw * 0.48;
-                    if (nextIsLeft === isLeft) {
-                        ymax = Math.min(0.92, (nextAnchorLine.bbox.y / ph) - 0.005);
+        let nextAnchorLine = null;
+        let foundAnchor = false;
+        for (const blk of blocks) {
+            if (blk.type === 'text' && blk.lines) {
+                for (const line of blk.lines) {
+                    if (line === anchorLine) {
+                        foundAnchor = true;
+                        continue;
+                    }
+                    if (foundAnchor && nextQPattern.test(line.text.trim())) {
+                        nextAnchorLine = line;
+                        break;
                     }
                 }
+            }
+            if (nextAnchorLine) break;
+        }
 
-                const box = [
-                    Math.round(ymin * 10000) / 10000,
-                    colXmin,
-                    Math.round(ymax * 10000) / 10000,
-                    colXmax
-                ];
-                box.page = pIdx + 1;
-                box.isFallbackBand = true;
-                return box;
+        const isLeft = anchorLine.bbox.x < pw * 0.48;
+        const colXmin = isLeft ? 0.02 : 0.48;
+        const colXmax = isLeft ? 0.50 : 0.98;
+
+        // Start slightly above the question anchor line
+        const ymin = Math.max(0.06, (anchorLine.bbox.y / ph) - 0.01);
+
+        let ymax = 0.92; // default page bottom before footer
+        if (nextAnchorLine) {
+            const nextIsLeft = nextAnchorLine.bbox.x < pw * 0.48;
+            if (nextIsLeft === isLeft) {
+                ymax = Math.min(0.92, (nextAnchorLine.bbox.y / ph) - 0.005);
             }
         }
-        return null;
+
+        const box = [
+            Math.round(ymin * 10000) / 10000,
+            colXmin,
+            Math.round(ymax * 10000) / 10000,
+            colXmax
+        ];
+        box.page = targetPageIdx + 1;
+        box.isFallbackBand = true;
+        return box;
     } catch (e) {
         logger.warn(`[diagramDetector] getQuestionColumnBandBox error: ${e.message}`);
         return null;
@@ -138,80 +256,74 @@ export function getQuestionColumnBandBox(pdfBuffer, qNum, pageIndex = -1) {
  * Deterministically finds the bounding box [ymin, xmin, ymax, xmax] (normalized 0-1)
  * of a diagram associated with a question on a PDF page using MuPDF structured text.
  * 
- * Works for:
- * 1. Diagrams positioned ABOVE the question stem text (between question anchor like "155." and the stem line).
- * 2. Diagrams positioned in a vertical gap BELOW the stem line and ABOVE options or the next question.
- * 
- * @param {Buffer} pdfBuffer - Single or multi-page PDF buffer
- * @param {number|string} qNum - Question number (e.g. 155)
- * @param {string} qText - Extracted question text/stem
- * @param {number} [pageIndex=0] - 0-indexed page number in the buffer
- * @returns {Array<number>|null} [ymin, xmin, ymax, xmax] in 0-1 range, or null if not detected
+ * BUG 1a FIX: When pageIndex is -1, uses keyword-based page disambiguation.
+ * BUG 1b FIX: Restricts stem-line search to lines between this question's anchor
+ *             and the next question's anchor only.
+ * BUG 1c FIX: Uses WeakMap cache for mupdf doc + per-page parsed text.
  */
 export function findDeterministicDiagramBox(pdfBuffer, qNum, qText, pageIndex = 0) {
     if (!pdfBuffer || !qNum) return null;
 
     try {
-        const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf');
-        const totalPages = doc.countPages();
+        const totalPages = getTotalPages(pdfBuffer);
         if (totalPages === 0) return null;
 
         const parsedQNum = parseInt(String(qNum).replace(/\D/g, ''), 10);
         if (!parsedQNum) return null;
 
-        const qNumPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum}(?:[\\.\\:\\s]|$)`, 'i');
+        const qNumPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum}(?:[\\.:;\\s]|$)`, 'i');
 
-        let targetPageIdx = pageIndex >= 0 ? Math.min(pageIndex, totalPages - 1) : -1;
-        let page = null;
-        let bounds = null;
-        let pageWidth = 0;
-        let pageHeight = 0;
-        let blocks = [];
-        let anchorLine = null;
+        let targetPageIdx, anchorLine, blocks, pageWidth, pageHeight;
 
-        const inspectPage = (pIdx) => {
-            const p = doc.loadPage(pIdx);
-            const b = p.getBounds();
-            const pw = b[2] - b[0];
-            const ph = b[3] - b[1];
-            if (pw <= 0 || ph <= 0) return null;
-            const st = p.toStructuredText();
-            const json = JSON.parse(st.asJSON());
-            const blks = json.blocks || [];
-            for (const blk of blks) {
-                if (blk.type === 'text' && blk.lines) {
-                    for (const line of blk.lines) {
-                        if (qNumPattern.test(line.text.trim())) {
-                            return { page: p, bounds: b, pageWidth: pw, pageHeight: ph, blocks: blks, anchorLine: line, pageIdx: pIdx };
+        if (pageIndex >= 0) {
+            // Try specified page first
+            const clampedIdx = Math.min(pageIndex, totalPages - 1);
+            const pageData = getCachedPage(pdfBuffer, clampedIdx);
+            if (pageData) {
+                ({ blocks, pw: pageWidth, ph: pageHeight } = pageData);
+                for (const blk of blocks) {
+                    if (blk.type === 'text' && blk.lines) {
+                        for (const line of blk.lines) {
+                            if (qNumPattern.test(line.text.trim())) {
+                                anchorLine = line;
+                                targetPageIdx = clampedIdx;
+                                break;
+                            }
                         }
+                    }
+                    if (anchorLine) break;
+                }
+            }
+        }
+
+        // If not found on target page (or pageIndex was -1), use keyword disambiguation
+        if (!anchorLine) {
+            const best = findBestPageForQuestion(pdfBuffer, parsedQNum, qText);
+            if (!best) {
+                logger.debug(`[diagramDetector] Question anchor not found for Q${parsedQNum} in ${totalPages} pages`);
+                return null;
+            }
+            ({ pageIdx: targetPageIdx, anchorLine, blocks, pw: pageWidth, ph: pageHeight } = best);
+        }
+
+        // ─── BUG 1b FIX: Find next question anchor to bound the search region ───
+        const nextQPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum + 1}(?:[\\.:;\\s]|$)`, 'i');
+        let nextAnchorLine = null;
+        let foundAnchor = false;
+        for (const blk of blocks) {
+            if (blk.type === 'text' && blk.lines) {
+                for (const line of blk.lines) {
+                    if (line === anchorLine) {
+                        foundAnchor = true;
+                        continue;
+                    }
+                    if (foundAnchor && nextQPattern.test(line.text.trim())) {
+                        nextAnchorLine = line;
+                        break;
                     }
                 }
             }
-            return null;
-        };
-
-        if (targetPageIdx >= 0) {
-            const match = inspectPage(targetPageIdx);
-            if (match) {
-                ({ page, bounds, pageWidth, pageHeight, blocks, anchorLine, targetPageIdx } = { ...match, targetPageIdx: match.pageIdx });
-            }
-        }
-
-        // If not found on target page, scan all other pages
-        if (!anchorLine) {
-            for (let pIdx = 0; pIdx < totalPages; pIdx++) {
-                if (pIdx === targetPageIdx) continue;
-                const match = inspectPage(pIdx);
-                if (match) {
-                    ({ page, bounds, pageWidth, pageHeight, blocks, anchorLine, targetPageIdx } = { ...match, targetPageIdx: match.pageIdx });
-                    break;
-                }
-            }
-        }
-
-        if (!anchorLine) {
-            logger.debug(`[diagramDetector] Question anchor not found for Q${parsedQNum} in ${totalPages} pages`);
-            return null;
+            if (nextAnchorLine) break;
         }
 
         // Determine column bounds (NEET papers typically use 2 columns)
@@ -219,7 +331,8 @@ export function findDeterministicDiagramBox(pdfBuffer, qNum, qText, pageIndex = 
         const colXmin = isLeftCol ? 0.02 * pageWidth : 0.48 * pageWidth;
         const colXmax = isLeftCol ? 0.50 * pageWidth : 0.98 * pageWidth;
 
-        // 2. Extract keywords from question stem to find stem text line
+        // ─── BUG 1b FIX: Extract keywords from question stem, search ONLY between
+        // this question's anchor and the next question's anchor ───
         const stemKeywords = (qText || '')
           .replace(/[^\w\s]/g, ' ')
           .split(/\s+/)
@@ -230,6 +343,11 @@ export function findDeterministicDiagramBox(pdfBuffer, qNum, qText, pageIndex = 
         for (const b of blocks) {
           if (b.type === 'text' && b.lines) {
             for (const line of b.lines) {
+              // BUG 1b: Only consider lines BELOW the anchor
+              if (line.bbox.y < anchorLine.bbox.y) continue;
+              // BUG 1b: Only consider lines ABOVE the next question anchor (if exists)
+              if (nextAnchorLine && line.bbox.y >= nextAnchorLine.bbox.y) continue;
+
               const inCol = isLeftCol ? line.bbox.x < pageWidth * 0.50 : line.bbox.x >= pageWidth * 0.45;
               if (!inCol) continue;
               const matchCount = stemKeywords.filter(kw => line.text.toLowerCase().includes(kw.toLowerCase())).length;
@@ -262,12 +380,15 @@ export function findDeterministicDiagramBox(pdfBuffer, qNum, qText, pageIndex = 
         }
 
         // Case B: Diagram in vertical GAP below stem text and before options/next question
+        // BUG 1b FIX: Only collect lines between anchor and next question boundary
         const colLines = [];
         for (const b of blocks) {
           if (b.type === 'text' && b.lines) {
             for (const line of b.lines) {
               const inCol = isLeftCol ? line.bbox.x < pageWidth * 0.50 : line.bbox.x >= pageWidth * 0.45;
               if (inCol && line.bbox.y >= anchorLine.bbox.y) {
+                // BUG 1b: stop at next question anchor
+                if (nextAnchorLine && line.bbox.y >= nextAnchorLine.bbox.y) continue;
                 colLines.push(line);
               }
             }
@@ -275,19 +396,16 @@ export function findDeterministicDiagramBox(pdfBuffer, qNum, qText, pageIndex = 
         }
         colLines.sort((a, b) => a.bbox.y - b.bbox.y);
 
-        const nextQPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum + 1}(?:[\\.\\:\\s]|$)`, 'i');
-        let boundaryLine = null;
+        let boundaryLine = nextAnchorLine || null;
 
+        // Also check for option markers as boundary
         for (let i = 0; i < colLines.length; i++) {
           const line = colLines[i];
-          if (nextQPattern.test(line.text.trim())) {
-            boundaryLine = line;
-            break;
-          }
           if (/^[\(\[\{]?(?:1|A)[\)\]\}]?\s+/i.test(line.text.trim()) && line.bbox.y > anchorLine.bbox.y + 15) {
             if (!boundaryLine || line.bbox.y < boundaryLine.bbox.y) {
               boundaryLine = line;
             }
+            break;
           }
         }
 
@@ -330,7 +448,7 @@ export function findDeterministicDiagramBox(pdfBuffer, qNum, qText, pageIndex = 
         }
 
         // Deterministic Rule 2 Fallback: If no clean vertical gap was found, fall back to the smart single column band
-        const fallbackBox = getQuestionColumnBandBox(pdfBuffer, parsedQNum, targetPageIdx);
+        const fallbackBox = getQuestionColumnBandBox(pdfBuffer, parsedQNum, targetPageIdx, qText);
         if (fallbackBox) {
             logger.info(`[diagramDetector] Fallback to column band for Q${parsedQNum} (page ${fallbackBox.page}): [${fallbackBox.join(', ')}]`);
             return fallbackBox;

@@ -318,7 +318,7 @@ export const createAiWorker = (io) => {
 
             // Retrieve current job to append to metadata without wiping it
             const { data: jobData } = await supabase.from('jobs').select('metadata').eq('id', jobId).single();
-            const newMetadata = { ...jobData?.metadata, failedPages };
+            const newMetadata = { ...jobData?.metadata, failedPages, promptVersion: 'v4' };
 
             await supabase.from('jobs').update({ 
                 progress: 70, 

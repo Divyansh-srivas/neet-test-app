@@ -1,9 +1,6 @@
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.js';
 import { createCanvas } from '@napi-rs/canvas';
 
-const leakedCanvases = [];
-const leakedDocs = [];
-
 /**
  * Renders a specific region of a 1-page PDF to a PNG buffer.
  * @param {Buffer} pdfBuffer - The single-page PDF buffer
@@ -55,17 +52,20 @@ export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
         };
         
         const renderTask = page.render(renderContext);
+        const timeoutId = setTimeout(() => {
+            timeoutFired = true;
+            try { renderTask.cancel(); } catch (e) {}
+        }, 15000);
         
-        await Promise.race([
-            renderTask.promise,
-            new Promise((_, reject) => setTimeout(() => {
-                timeoutFired = true;
-                leakedCanvases.push(canvas);
-                leakedDocs.push({ pdfDocument, page });
-                try { renderTask.cancel(); } catch (e) {}
-                reject(new Error('PDF render timed out after 15 seconds'));
-            }, 15000))
-        ]);
+        try {
+            await renderTask.promise;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+
+        if (timeoutFired) {
+            throw new Error('PDF render timed out after 15 seconds');
+        }
         
         // CRITICAL FIX: Allow PDF.js microtasks to finish writing to the canvas context
         // before we lock it for encoding in Rust. This prevents the "Failed to unwrap exclusive reference" crash.
@@ -151,17 +151,20 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
         };
         
         const renderTask = page.render(renderContext);
-        
-        await Promise.race([
-            renderTask.promise,
-            new Promise((_, reject) => setTimeout(() => {
-                timeoutFired = true;
-                leakedCanvases.push(canvas);
-                leakedDocs.push({ pdfDocument, page });
-                try { renderTask.cancel(); } catch (e) {}
-                reject(new Error('PDF render timed out after 15 seconds'));
-            }, 15000))
-        ]);
+        const timeoutId = setTimeout(() => {
+            timeoutFired = true;
+            try { renderTask.cancel(); } catch (e) {}
+        }, 15000);
+
+        try {
+            await renderTask.promise;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+
+        if (timeoutFired) {
+            throw new Error('PDF render timed out after 15 seconds');
+        }
         
         // CRITICAL FIX: Allow PDF.js microtasks to finish writing to the canvas context
         // before we lock it for encoding in Rust. This prevents the "Failed to unwrap exclusive reference" crash.
@@ -182,6 +185,9 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
     }
 };
 
+// ─── BUG 2 FIX: Render each page once (white bg, scale 2.5, LRU of 3 pages),
+// crop with drawImage. Validate bbox, throw on degenerate sizes. ───
+
 export const createPdfImageProcessor = async (pdfBuffer) => {
     const uint8Array = new Uint8Array(pdfBuffer);
     
@@ -197,20 +203,69 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
         new Promise((_, reject) => setTimeout(() => reject(new Error('PDF document loading timed out after 15 seconds')), 15000))
     ]);
     
-    const pageCache = {};
+    // LRU cache for rendered full-page canvases (max 3 pages)
+    const PAGE_RENDER_SCALE = 2.5;
+    const MAX_CACHED_PAGES = 3;
+    const renderedPages = new Map(); // pageNum → { canvas, viewport, usedAt }
+
+    async function getRenderedPage(pageNum) {
+        if (renderedPages.has(pageNum)) {
+            const entry = renderedPages.get(pageNum);
+            entry.usedAt = Date.now();
+            return entry;
+        }
+
+        // Evict LRU if at capacity
+        if (renderedPages.size >= MAX_CACHED_PAGES) {
+            let oldestKey = null, oldestTime = Infinity;
+            for (const [key, val] of renderedPages) {
+                if (val.usedAt < oldestTime) {
+                    oldestTime = val.usedAt;
+                    oldestKey = key;
+                }
+            }
+            if (oldestKey !== null) {
+                renderedPages.delete(oldestKey);
+            }
+        }
+
+        const page = await pdfDocument.getPage(pageNum);
+        const viewport = page.getViewport({ scale: PAGE_RENDER_SCALE });
+
+        // Create full-page canvas with WHITE background
+        const canvas = createCanvas(Math.round(viewport.width), Math.round(viewport.height));
+        const context = canvas.getContext('2d');
+        // Fill white background first
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        const renderTask = page.render({ canvasContext: context, viewport });
+        let timeoutFired = false;
+        const timeoutId = setTimeout(() => {
+            timeoutFired = true;
+            try { renderTask.cancel(); } catch (e) {}
+        }, 20000);
+
+        try {
+            await renderTask.promise;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+
+        if (timeoutFired) {
+            throw new Error(`Page ${pageNum} render timed out after 20 seconds`);
+        }
+
+        // Allow PDF.js microtasks to settle
+        await new Promise(r => setTimeout(r, 50));
+
+        const entry = { canvas, viewport, page, usedAt: Date.now() };
+        renderedPages.set(pageNum, entry);
+        return entry;
+    }
     
     return {
         cropRegion: async (pageNum, bbox) => {
-            let timeoutFired = false;
-            let page = pageCache[pageNum];
-            if (!page) {
-                page = await pdfDocument.getPage(pageNum);
-                pageCache[pageNum] = page;
-            }
-            
-            const scale = 2.0;
-            const viewport = page.getViewport({ scale });
-            
             let ymin, xmin, ymax, xmax;
             if (Array.isArray(bbox) && bbox.length === 4) {
                 [ymin, xmin, ymax, xmax] = bbox;
@@ -222,45 +277,63 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
             const scale1000 = (ymin > 1 || xmin > 1 || ymax > 1 || xmax > 1);
             const divisor = scale1000 ? 1000 : 1;
 
-            const top = (ymin / divisor) * viewport.height;
-            const left = (xmin / divisor) * viewport.width;
-            const bottom = (ymax / divisor) * viewport.height;
-            const right = (xmax / divisor) * viewport.width;
-            
-            const width = right - left;
-            const height = bottom - top;
-            
-            const canvas = createCanvas(Math.round(width), Math.round(height));
-            const context = canvas.getContext('2d');
-            context.translate(-left, -top);
-            
-            const renderContext = {
-                canvasContext: context,
-                viewport: viewport
-            };
-            
-            const renderTask = page.render(renderContext);
-            
-            await Promise.race([
-                renderTask.promise,
-                new Promise((_, reject) => setTimeout(() => {
-                    timeoutFired = true;
-                    leakedCanvases.push(canvas);
-                    try { renderTask.cancel(); } catch (e) {}
-                    reject(new Error('PDF render timed out after 15 seconds'));
-                }, 15000))
-            ]);
-            
-            // CRITICAL FIX: Allow PDF.js microtasks to finish writing to the canvas context
-            // before we lock it for encoding in Rust. This prevents the "Failed to unwrap exclusive reference" crash.
-            await new Promise(r => setTimeout(r, 50));
-            
-            return await canvas.encode('png');
+            // Normalize to 0-1
+            const ny1 = ymin / divisor;
+            const nx1 = xmin / divisor;
+            const ny2 = ymax / divisor;
+            const nx2 = xmax / divisor;
+
+            // ─── BUG 2 FIX: Validate bbox ───
+            // Reject inverted coordinates
+            if (ny2 <= ny1 || nx2 <= nx1) {
+                throw new Error(`Degenerate bbox: inverted coordinates [${ymin}, ${xmin}, ${ymax}, ${xmax}]`);
+            }
+            // Reject sliver crops (< 1% of page in either dimension)
+            if ((ny2 - ny1) < 0.01 || (nx2 - nx1) < 0.01) {
+                throw new Error(`Degenerate bbox: sliver crop [${ymin}, ${xmin}, ${ymax}, ${xmax}]`);
+            }
+            // Reject whole-page crops (> 95% of page area)
+            if ((ny2 - ny1) * (nx2 - nx1) > 0.95) {
+                throw new Error(`Degenerate bbox: whole-page crop [${ymin}, ${xmin}, ${ymax}, ${xmax}]`);
+            }
+
+            // Get pre-rendered full page
+            const { canvas: fullPageCanvas, viewport } = await getRenderedPage(pageNum);
+
+            // Calculate pixel coordinates on the full-page canvas
+            const top = ny1 * viewport.height;
+            const left = nx1 * viewport.width;
+            const bottom = ny2 * viewport.height;
+            const right = nx2 * viewport.width;
+
+            const width = Math.round(right - left);
+            const height = Math.round(bottom - top);
+
+            // Reject degenerate pixel sizes
+            if (width < 10 || height < 10) {
+                throw new Error(`Degenerate bbox: pixel size ${width}x${height} too small`);
+            }
+
+            // ─── BUG 2 FIX: Crop by drawing from pre-rendered canvas into a white-filled canvas ───
+            const cropCanvas = createCanvas(width, height);
+            const cropCtx = cropCanvas.getContext('2d');
+            // White background for the crop
+            cropCtx.fillStyle = '#ffffff';
+            cropCtx.fillRect(0, 0, width, height);
+            // Draw the relevant portion of the full-page canvas
+            cropCtx.drawImage(
+                fullPageCanvas,
+                Math.round(left), Math.round(top), width, height,  // source rect
+                0, 0, width, height                                  // dest rect
+            );
+
+            return await cropCanvas.encode('png');
         },
         cleanup: async () => {
-            for (const page of Object.values(pageCache)) {
-                try { page.cleanup(); } catch (e) {}
+            for (const entry of renderedPages.values()) {
+                try { entry.page.cleanup(); } catch (e) {}
             }
+            renderedPages.clear();
             try { await pdfDocument.destroy(); } catch (e) {}
         }
     };

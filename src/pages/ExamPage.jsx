@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { saveTest } from '../utils/storage'
 import { useSettings } from '../utils/SettingsContext'
-import { Clock, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, AlertTriangle, Menu, X, Check, ChevronsRight, ChevronsLeft, ZoomIn, Edit3 } from 'lucide-react'
+import { Clock, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, AlertTriangle, Menu, X, Check, ChevronsRight, ChevronsLeft, ZoomIn, Edit3, FileText, ExternalLink } from 'lucide-react'
 import NotesPad from '../components/NotesPad'
 import { useAuth } from '../utils/useAuth'
 import { createNotification } from '../api/notifications'
@@ -48,6 +48,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
   const [isPaletteOpen, setIsPaletteOpen] = useState(false)
   const [expandedSubjects, setExpandedSubjects] = useState({})
   const [zoomedImage, setZoomedImage] = useState(null)
+  const [brokenImages, setBrokenImages] = useState({})
   
   // Notes Pad State
   const [showNotes, setShowNotes] = useState(false)
@@ -587,7 +588,13 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
 
             {/* Question Text & Diagram */}
             {(() => {
-              const diagSrc = q.imageUrl || q.diagramUrl || q.diagram;
+              const rawDiagSrc = q.imageUrl || q.diagramUrl || q.diagram;
+              const isBroken = !!brokenImages[q.id];
+              const diagSrc = isBroken ? null : rawDiagSrc;
+              const hasDiagIntent = !!q.hasDiagram || /\b((?:given|shown|represented|accompanying|following)\s+(?:diagrams?|figures?|figs?\.?|graphs?|charts?|schematics?|circuits?|body\s*plans?)|(?:diagrams?|figures?|figs?\.?|graphs?|charts?)\s+(?:given|shown|represented|below|above)|in\s+the\s+(?:given\s+)?(?:diagrams?|figures?)|shown\s+in\s+(?:the\s+)?(?:given\s+)?(?:diagrams?|figures?)|structure\s+shown)\b/i.test(q.question || '');
+              const isMissingImage = hasDiagIntent && !diagSrc;
+              const pdfUrl = q.pdfUrl || test.pdfUrl;
+
               const isDiagramAbove = diagSrc && /\b(figure\s+(given\s+)?above|above\s+figure)\b/i.test(q.question || '');
               const diagramNode = diagSrc ? (
                 <div style={{ marginTop: isDiagramAbove ? 0 : 20, marginBottom: isDiagramAbove ? 20 : 0, textAlign: 'center', position: 'relative', display: 'inline-block' }}>
@@ -595,6 +602,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
                     src={diagSrc} 
                     alt="Question Diagram" 
                     onClick={() => setZoomedImage(diagSrc)}
+                    onError={() => setBrokenImages(prev => ({ ...prev, [q.id]: true }))}
                     style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in', background: '#ffffff', padding: 6, display: 'block' }} 
                   />
                   <div style={{ position: 'absolute', bottom: 12, right: 12, background: 'rgba(0,0,0,0.65)', color: 'white', padding: '4px 8px', borderRadius: 6, fontSize: 11, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -603,11 +611,57 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
                 </div>
               ) : null;
 
+              const warningBox = isMissingImage ? (
+                <div style={{
+                  marginTop: 16,
+                  marginBottom: 16,
+                  padding: '12px 16px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <AlertTriangle size={18} color="#f87171" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: '#fca5a5', fontWeight: 500 }}>
+                      Diagram reference detected, but image is unavailable.
+                    </span>
+                  </div>
+                  {pdfUrl && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(pdfUrl, '_blank')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 12px',
+                        background: 'rgba(239, 68, 68, 0.2)',
+                        border: '1px solid rgba(239, 68, 68, 0.5)',
+                        borderRadius: 8,
+                        color: '#fecaca',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <FileText size={14} /> Open original PDF <ExternalLink size={12} />
+                    </button>
+                  )}
+                </div>
+              ) : null;
+
               return (
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, marginBottom: 24, lineHeight: 1.7, fontSize: questionFontSize }}>
                   {isDiagramAbove && diagramNode && <div style={{ textAlign: 'center' }}>{diagramNode}</div>}
                   <MathText text={q.question} />
                   {!isDiagramAbove && diagramNode && <div style={{ textAlign: 'center' }}>{diagramNode}</div>}
+                  {warningBox}
                 </div>
               );
             })()}
