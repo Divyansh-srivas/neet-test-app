@@ -1,60 +1,53 @@
 import * as mupdf from 'mupdf';
 import { logger } from '../utils/logger.js';
 
+const FIGURE_NOUNS = '(?:diagrams?|figures?|figs?\\.?|graphs?|charts?|flow\\s*charts?|pie\\s*charts?|schematics?|circuits?)';
+
 export const FIGURE_INTENT_REGEX = new RegExp(
     '\\b(' + [
-        'diagrams?',
-        'figures?',
-        'figs?\\.?',
-        'graphs?',
-        'charts?',
-        'flow\\s*charts?',
-        'pie\\s*charts?',
-        'structure\\s+shown',
-        'as\\s+shown',
-        'given\\s+below',
-        'schematics?',
-        'body\\s+plans?',
-        'shown\\s+in',
-        'following\\s+structures?',
-        'refer\\s+to\\s+the\\s+(?:diagram|figure|graph)',
-        'observe\\s+the\\s+(?:following|given)',
-        'identify\\s+(?:each\\s+step|the\\s+steps?|[xyzpabcd]\\b)',
-        'step\\s+[\'"]?[xyzpabcd][\'"]?',
-        'part\\s+[\'"]?[xyzpabcd][\'"]?',
-        'labelled\\s+(?:as\\s+)?[\'"]?[xyzpabcd][\'"]?',
-        'given\\s+below\\s+represents',
-        'represented\\s+in\\s+the'
+        `(?:given|shown|represented|accompanying|following)\\s+${FIGURE_NOUNS}`,
+        `${FIGURE_NOUNS}\\s+(?:given|shown|represented|below|above)`,
+        `in\\s+the\\s+(?:given\\s+)?${FIGURE_NOUNS}`,
+        `(?:as\\s+)?shown\\s+in\\s+(?:the\\s+)?(?:given\\s+)?${FIGURE_NOUNS}`,
+        `${FIGURE_NOUNS}\\s+shows?`,
+        `refer\\s+to\\s+(?:the\\s+)?${FIGURE_NOUNS}`,
+        `observe\\s+the\\s+(?:following|given)\\s+${FIGURE_NOUNS}`,
+        `given\\s+below\\s+is\\s+(?:a|the|an)?\\s*(?:schematic\\s+representation|body\\s+plan|${FIGURE_NOUNS})`,
+        `(?:structure|cell|organism)\\s+shown\\s+in\\s+(?:the\\s+)?(?:given\\s+)?${FIGURE_NOUNS}`,
+        `the\\s+following\\s+structure\\s+is\\s+most\\s+likely`,
+        `(?:marked|labelled)\\s+(?:as\\s+)?['"][a-zA-Z0-9]['"]\\s+in\\s+the\\s+(?:given\\s+)?${FIGURE_NOUNS}`,
+        `identify\\s+the\\s+parts?\\s+[a-zA-Z0-9\\-]+(?:\\s+in\\s+the\\s+(?:given\\s+)?${FIGURE_NOUNS})?`
     ].join('|') + ')\\b',
     'i'
 );
 
-export const VISUAL_NECESSITY_REGEX = /\b(this\s+type\s+of\s+[a-z]+|observe\s+the\s+following|the\s+following\s+[a-z]+\s+shows|marked\s+as\s+['"][a-z0-9]['"]|parts?\s+labelled|identify\s+the\s+parts|represented\s+in\s+the\s+following|which\s+of\s+the\s+following\s+reptilian\s+hearts|can\s+be\s+that\s+of)\b/i;
+// General visual necessity rule:
+// Questions where the stem refers to an unstated specimen/drawing via demonstratives
+export const VISUAL_NECESSITY_REGEX = /\b(this\s+(?:type|kind|specimen)\s+of\s+(?:egg|cell|organism|tissue|animal|plant|structure|flower|leaf|fruit|seed|heart)|the\s+organism\s+shown\s+in\s+the\s+given\s+figure)\b/i;
 
-export function hasDegenerateOrVisualOptions(options) {
+export function hasDegenerateOrVisualOptions(options, stem = '') {
     if (!options) return false;
+    // If the question explicitly asks for a count (e.g. "The number of correct statements: 1, 2, 3, 4"),
+    // the numeric options are count values, not visual option diagrams.
+    if (/the\s+number\s+of\s+(?:correct|incorrect|true|false)\s+statements/i.test(stem)) {
+        return false;
+    }
     if (typeof options === 'object') {
         const vals = Object.values(options).map(v => typeof v === 'string' ? v.trim() : String(v || '').trim());
         if (vals.length === 0) return true;
-        // Check if all options are bare numbers like "1.", "(1)", "1", "Option 1"
-        const isDegenerate = vals.every(v => !v || /^(?:(?:\(?\d+\)?|\(?[a-dA-D]\)?|Option\s+[a-dA-D]|\d+[\.\)]?))$/i.test(v));
-        return isDegenerate;
+        // Strictly bare numbers or degenerate markers like "1.", "(1)", "Option A" with NO real text
+        return vals.every(v => !v || /^(?:(?:\(?\d+\)?|\(?[a-dA-D]\)?|\d+[\.\)]|Option\s+[a-dA-D]))$/i.test(v));
     }
     return false;
 }
 
 export function isFigureRequired(text, options = null) {
     const stem = typeof text === 'string' ? text : '';
-    let optionsText = '';
-    if (options && typeof options === 'object') {
-        optionsText = Object.values(options).join(' ');
-    }
-    const combined = `${stem} ${optionsText}`.trim();
-    if (!combined) return false;
+    if (!stem && !options) return false;
 
-    if (FIGURE_INTENT_REGEX.test(combined)) return true;
-    if (VISUAL_NECESSITY_REGEX.test(combined)) return true;
-    if (options && hasDegenerateOrVisualOptions(options)) return true;
+    if (FIGURE_INTENT_REGEX.test(stem)) return true;
+    if (VISUAL_NECESSITY_REGEX.test(stem)) return true;
+    if (options && hasDegenerateOrVisualOptions(options, stem)) return true;
 
     return false;
 }

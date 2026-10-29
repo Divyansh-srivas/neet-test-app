@@ -456,7 +456,7 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
     let extractedQuestions = [];
     
     // Config values
-    const promptVersion = 'v3'; // Bumped for schema change
+    const promptVersion = 'v4'; // Bumped for schema change and deterministic diagram rules
     const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
     const responseSchema = {
         type: "array",
