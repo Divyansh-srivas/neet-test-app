@@ -738,14 +738,14 @@ CRITICAL: Extract EVERY question on this page. Missing even one question is unac
             for (const q of normalized) {
                 const qNum = q.questionNumber || q.qNum;
                 const stem = q.questionText || q.question || '';
-                const needsDiagram = isFigureRequired(stem);
+                const needsDiagram = isFigureRequired(stem, q.options);
 
                 if (needsDiagram && (!q.hasDiagram || !q.imageBox)) {
                     logger.info(`[GEMINI NATIVE] Q${qNum} mentions figure/diagram but lacks imageBox. Running deterministic diagram detector...`);
                     const detectedBox = findDeterministicDiagramBox(pagePdfBuffer, qNum, stem, 0);
                     if (detectedBox) {
                         q.hasDiagram = true;
-                        q.imageBox = { page: 1, box: detectedBox };
+                        q.imageBox = { page: detectedBox.page || 1, box: detectedBox };
                         q.diagramBox = q.imageBox;
                         logger.info(`[GEMINI NATIVE] Successfully recovered diagramBox for Q${qNum}: [${detectedBox.join(', ')}]`);
                     } else {

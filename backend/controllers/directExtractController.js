@@ -131,7 +131,7 @@ export const uploadAndExtractDirect = async (req, res) => {
                                     // 2. Process Diagram Cropping (Non-blocking array)
                                     const cropPromises = questions.map(async (q) => {
                                         // Deterministic recovery failsafe: If question mentions figure but lacks diagramBox
-                                        if ((!q.hasDiagram || !q.diagramBox) && isFigureRequired(q.question)) {
+                                        if ((!q.hasDiagram || !q.diagramBox) && isFigureRequired(q.question, q.options)) {
                                             const recoveredBox = findDeterministicDiagramBox(pageBuffer, q.qNum, q.question, 0);
                                             if (recoveredBox) {
                                                 q.hasDiagram = true;
@@ -146,17 +146,26 @@ export const uploadAndExtractDirect = async (req, res) => {
                                                 const { cropPdfRegionToImage } = await import('../services/crop.service.js');
                                                 const croppedImageBuffer = await cropPdfRegionToImage(pageBuffer, q.diagramBox);
                                                 const fileName = `diagrams/${jobId}_p${pageNum}_q${q.qNum}_${Date.now()}.png`;
-                                                
-                                                const { error: uploadError } = await supabaseAdmin.storage
-                                                    .from('uploads')
-                                                    .upload(fileName, croppedImageBuffer, { contentType: 'image/png', upsert: true });
+                                                let finalUrl = null;
 
-                                                if (!uploadError) {
-                                                    const { data: publicUrlData } = supabaseAdmin.storage
+                                                try {
+                                                    const { error: uploadError } = await supabaseAdmin.storage
                                                         .from('uploads')
-                                                        .getPublicUrl(fileName);
-                                                    q.diagramUrl = publicUrlData.publicUrl;
+                                                        .upload(fileName, croppedImageBuffer, { contentType: 'image/png', upsert: true });
+
+                                                    if (!uploadError) {
+                                                        const { data: publicUrlData } = supabaseAdmin.storage
+                                                            .from('uploads')
+                                                            .getPublicUrl(fileName);
+                                                        finalUrl = publicUrlData.publicUrl;
+                                                    }
+                                                } catch (upErr) {}
+
+                                                // Fallback to base64 if storage failed
+                                                if (!finalUrl) {
+                                                    finalUrl = `data:image/png;base64,${croppedImageBuffer.toString('base64')}`;
                                                 }
+                                                q.diagramUrl = finalUrl;
                                             } catch (cropErr) {
                                                 logger.warn(`Failed to crop diagram for p${pageNum} q${q.qNum}: ${cropErr.message}`);
                                             }
@@ -170,13 +179,22 @@ export const uploadAndExtractDirect = async (req, res) => {
                                                     const { cropPdfRegionToImage } = await import('../services/crop.service.js');
                                                     const optBuffer = await cropPdfRegionToImage(pageBuffer, optBox.box);
                                                     const optFileName = `diagrams/${jobId}_p${pageNum}_q${q.qNum}_opt${optKey}_${Date.now()}.png`;
-                                                    const { error: optUploadErr } = await supabaseAdmin.storage
-                                                        .from('uploads')
-                                                        .upload(optFileName, optBuffer, { contentType: 'image/png', upsert: true });
-                                                    if (!optUploadErr) {
-                                                        const { data: optUrlData } = supabaseAdmin.storage.from('uploads').getPublicUrl(optFileName);
-                                                        q.optionImageUrls[optKey] = optUrlData.publicUrl;
+                                                    let optUrl = null;
+
+                                                    try {
+                                                        const { error: optUploadErr } = await supabaseAdmin.storage
+                                                            .from('uploads')
+                                                            .upload(optFileName, optBuffer, { contentType: 'image/png', upsert: true });
+                                                        if (!optUploadErr) {
+                                                            const { data: optUrlData } = supabaseAdmin.storage.from('uploads').getPublicUrl(optFileName);
+                                                            optUrl = optUrlData.publicUrl;
+                                                        }
+                                                    } catch (upErr) {}
+
+                                                    if (!optUrl) {
+                                                        optUrl = `data:image/png;base64,${optBuffer.toString('base64')}`;
                                                     }
+                                                    q.optionImageUrls[optKey] = optUrl;
                                                 } catch (optCropErr) {
                                                     logger.warn(`Failed to crop option image for p${pageNum} q${q.qNum} opt ${optKey}: ${optCropErr.message}`);
                                                 }

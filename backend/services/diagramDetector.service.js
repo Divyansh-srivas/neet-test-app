@@ -1,11 +1,144 @@
 import * as mupdf from 'mupdf';
 import { logger } from '../utils/logger.js';
 
-export const FIGURE_INTENT_REGEX = /\b(figure\s+(given\s+)?(above|below)|above\s+figure|below\s+figure|(given|shown|represented|accompanying|following)\s+figure|(given|shown|represented|accompanying|following)\s+diagram|in\s+the\s+(given\s+)?(diagram|figure|graph|circuit|scheme|chart|curve|pedigree)|refer\s+to\s+the\s+(diagram|figure|graph)|observe\s+the\s+(following|given)\s+(figure|diagram)|identify\s+(each\s+step|the\s+steps?|[xyzpabcd]\b)|step\s+['"]?[xyzpabcd]['"]?|part\s+['"]?[xyzpabcd]['"]?|labelled\s+(as\s+)?['"]?[xyzpabcd]['"]?|given\s+below\s+represents\s+the|represented\s+in\s+the\s+diagram)\b/i;
+export const FIGURE_INTENT_REGEX = new RegExp(
+    '\\b(' + [
+        'diagrams?',
+        'figures?',
+        'figs?\\.?',
+        'graphs?',
+        'charts?',
+        'flow\\s*charts?',
+        'pie\\s*charts?',
+        'structure\\s+shown',
+        'as\\s+shown',
+        'given\\s+below',
+        'schematics?',
+        'body\\s+plans?',
+        'shown\\s+in',
+        'following\\s+structures?',
+        'refer\\s+to\\s+the\\s+(?:diagram|figure|graph)',
+        'observe\\s+the\\s+(?:following|given)',
+        'identify\\s+(?:each\\s+step|the\\s+steps?|[xyzpabcd]\\b)',
+        'step\\s+[\'"]?[xyzpabcd][\'"]?',
+        'part\\s+[\'"]?[xyzpabcd][\'"]?',
+        'labelled\\s+(?:as\\s+)?[\'"]?[xyzpabcd][\'"]?',
+        'given\\s+below\\s+represents',
+        'represented\\s+in\\s+the'
+    ].join('|') + ')\\b',
+    'i'
+);
 
-export function isFigureRequired(text) {
-    if (!text || typeof text !== 'string') return false;
-    return FIGURE_INTENT_REGEX.test(text);
+export const VISUAL_NECESSITY_REGEX = /\b(this\s+type\s+of\s+[a-z]+|observe\s+the\s+following|the\s+following\s+[a-z]+\s+shows|marked\s+as\s+['"][a-z0-9]['"]|parts?\s+labelled|identify\s+the\s+parts|represented\s+in\s+the\s+following|which\s+of\s+the\s+following\s+reptilian\s+hearts|can\s+be\s+that\s+of)\b/i;
+
+export function hasDegenerateOrVisualOptions(options) {
+    if (!options) return false;
+    if (typeof options === 'object') {
+        const vals = Object.values(options).map(v => typeof v === 'string' ? v.trim() : String(v || '').trim());
+        if (vals.length === 0) return true;
+        // Check if all options are bare numbers like "1.", "(1)", "1", "Option 1"
+        const isDegenerate = vals.every(v => !v || /^(?:(?:\(?\d+\)?|\(?[a-dA-D]\)?|Option\s+[a-dA-D]|\d+[\.\)]?))$/i.test(v));
+        return isDegenerate;
+    }
+    return false;
+}
+
+export function isFigureRequired(text, options = null) {
+    const stem = typeof text === 'string' ? text : '';
+    let optionsText = '';
+    if (options && typeof options === 'object') {
+        optionsText = Object.values(options).join(' ');
+    }
+    const combined = `${stem} ${optionsText}`.trim();
+    if (!combined) return false;
+
+    if (FIGURE_INTENT_REGEX.test(combined)) return true;
+    if (VISUAL_NECESSITY_REGEX.test(combined)) return true;
+    if (options && hasDegenerateOrVisualOptions(options)) return true;
+
+    return false;
+}
+
+/**
+ * Fallback to the single-column band around a question (from anchor to next question in same column).
+ */
+export function getQuestionColumnBandBox(pdfBuffer, qNum, pageIndex = -1) {
+    if (!pdfBuffer || !qNum) return null;
+    try {
+        const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf');
+        const totalPages = doc.countPages();
+        const parsedQNum = parseInt(String(qNum).replace(/\D/g, ''), 10);
+        if (!parsedQNum) return null;
+
+        const qNumPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum}(?:[\\.\\:\\s]|$)`, 'i');
+        const nextQPattern = new RegExp(`^\\s*(?:Q\\.?\\s*)?${parsedQNum + 1}(?:[\\.\\:\\s]|$)`, 'i');
+
+        let targetPages = [];
+        if (pageIndex >= 0 && pageIndex < totalPages) {
+            targetPages.push(pageIndex);
+        } else {
+            for (let i = 0; i < totalPages; i++) targetPages.push(i);
+        }
+
+        for (const pIdx of targetPages) {
+            const page = doc.loadPage(pIdx);
+            const b = page.getBounds();
+            const pw = b[2] - b[0];
+            const ph = b[3] - b[1];
+            if (pw <= 0 || ph <= 0) continue;
+
+            const st = page.toStructuredText();
+            const json = JSON.parse(st.asJSON());
+            const blocks = json.blocks || [];
+
+            let anchorLine = null;
+            let nextAnchorLine = null;
+
+            for (const blk of blocks) {
+                if (blk.type === 'text' && blk.lines) {
+                    for (const line of blk.lines) {
+                        const t = line.text.trim();
+                        if (!anchorLine && qNumPattern.test(t)) {
+                            anchorLine = line;
+                        } else if (anchorLine && !nextAnchorLine && nextQPattern.test(t)) {
+                            nextAnchorLine = line;
+                        }
+                    }
+                }
+            }
+
+            if (anchorLine) {
+                const isLeft = anchorLine.bbox.x < pw * 0.48;
+                const colXmin = isLeft ? 0.02 : 0.48;
+                const colXmax = isLeft ? 0.50 : 0.98;
+
+                // Start slightly above the question anchor line
+                const ymin = Math.max(0.06, (anchorLine.bbox.y / ph) - 0.01);
+
+                let ymax = 0.92; // default page bottom before footer
+                if (nextAnchorLine) {
+                    const nextIsLeft = nextAnchorLine.bbox.x < pw * 0.48;
+                    if (nextIsLeft === isLeft) {
+                        ymax = Math.min(0.92, (nextAnchorLine.bbox.y / ph) - 0.005);
+                    }
+                }
+
+                const box = [
+                    Math.round(ymin * 10000) / 10000,
+                    colXmin,
+                    Math.round(ymax * 10000) / 10000,
+                    colXmax
+                ];
+                box.page = pIdx + 1;
+                box.isFallbackBand = true;
+                return box;
+            }
+        }
+        return null;
+    } catch (e) {
+        logger.warn(`[diagramDetector] getQuestionColumnBandBox error: ${e.message}`);
+        return null;
+    }
 }
 
 /**
@@ -197,9 +330,17 @@ export function findDeterministicDiagramBox(pdfBuffer, qNum, qText, pageIndex = 
             parseFloat(Math.min(1, xmax).toFixed(4))
           ];
           box.page = targetPageIdx + 1;
+          box.isTightGap = true;
 
           logger.info(`[diagramDetector] Detected GAP diagram for Q${parsedQNum} (page ${box.page}, gap=${Math.round(maxGap)}pt): [${box.join(', ')}]`);
           return box;
+        }
+
+        // Deterministic Rule 2 Fallback: If no clean vertical gap was found, fall back to the smart single column band
+        const fallbackBox = getQuestionColumnBandBox(pdfBuffer, parsedQNum, targetPageIdx);
+        if (fallbackBox) {
+            logger.info(`[diagramDetector] Fallback to column band for Q${parsedQNum} (page ${fallbackBox.page}): [${fallbackBox.join(', ')}]`);
+            return fallbackBox;
         }
 
         return null;

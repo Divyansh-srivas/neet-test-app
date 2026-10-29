@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
 import { getTotalPages, splitPdfIntoChunk, releasePdf } from '../services/pdf.service.js';
 import { ensureLocalFile } from '../services/storageSync.js';
+import { isFigureRequired, hasDegenerateOrVisualOptions } from '../services/diagramDetector.service.js';
 
 export const createAiWorker = (io) => {
     return new Worker('ai-extraction', async job => {
@@ -330,6 +331,18 @@ export const createAiWorker = (io) => {
                 jobId, progress: 70, pagesCompleted: totalPages, totalPages, questionsExtracted: allExtractedRaw.length, status: `Extracted ${allExtractedRaw.length} questions! Processing...`,
                 failedPages
             });
+
+            // RULE 1: Deterministic figure-reference trigger post-Pass 1
+            for (const q of allExtractedRaw) {
+                if (!q) continue;
+                const stem = q.question || q.questionText || '';
+                if (isFigureRequired(stem, q.options)) {
+                    q.hasDiagram = true;
+                }
+                if (hasDegenerateOrVisualOptions(q.options)) {
+                    q.hasVisualOptions = true;
+                }
+            }
 
             await queues.imageExtraction.add('extract-images', {
                 jobId, userId, filePath, storagePath, token, questions: allExtractedRaw, testName, duration
