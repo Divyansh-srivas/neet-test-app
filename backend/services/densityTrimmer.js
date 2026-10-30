@@ -1,5 +1,5 @@
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.js';
-import { createCanvas } from 'canvas';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { supabaseAdmin } from '../config/supabase.js';
 import { randomUUID } from 'crypto';
 
@@ -207,18 +207,27 @@ export async function cropAndUploadDiagram(pdfBuffer, box, testId, qNum) {
         const cropH = currentYmax - currentYmin;
         const finalXmin = pxXmin + relativeXmin;
         
-        const cropCanvas = createCanvas(cropW, cropH);
-        const cropCtx = cropCanvas.getContext('2d');
-        
-        cropCtx.fillStyle = 'white';
-        cropCtx.fillRect(0, 0, cropW, cropH);
-        cropCtx.drawImage(
-            canvas,
-            finalXmin, currentYmin, cropW, cropH,
-            0, 0, cropW, cropH
-        );
-        
-        const pngBuffer = cropCanvas.toBuffer('image/png');
+        let pngBuffer;
+        try {
+            const img = await loadImage(await canvas.encode('png'));
+            const cropCanvas = createCanvas(cropW, cropH);
+            const cropCtx = cropCanvas.getContext('2d');
+            cropCtx.fillStyle = '#ffffff';
+            cropCtx.fillRect(0, 0, cropW, cropH);
+            cropCtx.drawImage(
+                img,
+                finalXmin, currentYmin, cropW, cropH,
+                0, 0, cropW, cropH
+            );
+            pngBuffer = await cropCanvas.encode('png');
+        } catch (drawErr) {
+            const sharp = (await import('sharp')).default;
+            const px = canvas.getContext('2d').getImageData(finalXmin, currentYmin, cropW, cropH);
+            pngBuffer = await sharp(
+                Buffer.from(px.data.buffer, px.data.byteOffset, px.data.byteLength),
+                { raw: { width: cropW, height: cropH, channels: 4 } }
+            ).flatten({ background: '#ffffff' }).png().toBuffer();
+        }
         
         // Upload to Supabase Storage
         const fileName = `diagrams/${testId || 'temp'}/${qNum}_${randomUUID()}.png`;

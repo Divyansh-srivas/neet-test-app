@@ -1,5 +1,6 @@
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.js';
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { logger } from '../utils/logger.js';
 
 /**
  * Renders a specific region of a 1-page PDF to a PNG buffer.
@@ -185,8 +186,8 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
     }
 };
 
-// ─── BUG 2 FIX: Render each page once (white bg, scale 2.5, LRU of 3 pages),
-// crop with drawImage. Validate bbox, throw on degenerate sizes. ───
+// ─── Render each page once (white bg, scale 2.5, LRU of 3 pages),
+// crop using loadImage or sharp fallback. Validate bbox, throw on degenerate sizes. ───
 
 export const createPdfImageProcessor = async (pdfBuffer) => {
     const uint8Array = new Uint8Array(pdfBuffer);
@@ -206,7 +207,7 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
     // LRU cache for rendered full-page canvases (max 3 pages)
     const PAGE_RENDER_SCALE = 2.5;
     const MAX_CACHED_PAGES = 3;
-    const renderedPages = new Map(); // pageNum → { canvas, viewport, usedAt }
+    const renderedPages = new Map(); // pageNum → { canvas, viewport, page, usedAt, image }
 
     async function getRenderedPage(pageNum) {
         if (renderedPages.has(pageNum)) {
@@ -259,7 +260,7 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
         // Allow PDF.js microtasks to settle
         await new Promise(r => setTimeout(r, 50));
 
-        const entry = { canvas, viewport, page, usedAt: Date.now() };
+        const entry = { canvas, viewport, page, usedAt: Date.now(), image: null };
         renderedPages.set(pageNum, entry);
         return entry;
     }
@@ -283,7 +284,7 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
             const ny2 = ymax / divisor;
             const nx2 = xmax / divisor;
 
-            // ─── BUG 2 FIX: Validate bbox ───
+            // Validate bbox
             // Reject inverted coordinates
             if (ny2 <= ny1 || nx2 <= nx1) {
                 throw new Error(`Degenerate bbox: inverted coordinates [${ymin}, ${xmin}, ${ymax}, ${xmax}]`);
@@ -298,7 +299,9 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
             }
 
             // Get pre-rendered full page
-            const { canvas: fullPageCanvas, viewport } = await getRenderedPage(pageNum);
+            const entry = await getRenderedPage(pageNum);
+            const pageCanvas = entry.canvas;
+            const viewport = entry.viewport;
 
             // Calculate pixel coordinates on the full-page canvas
             const top = ny1 * viewport.height;
@@ -306,28 +309,35 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
             const bottom = ny2 * viewport.height;
             const right = nx2 * viewport.width;
 
-            const width = Math.round(right - left);
-            const height = Math.round(bottom - top);
+            const sx = Math.round(left);
+            const sy = Math.round(top);
+            const sw = Math.round(right - left);
+            const sh = Math.round(bottom - top);
 
             // Reject degenerate pixel sizes
-            if (width < 10 || height < 10) {
-                throw new Error(`Degenerate bbox: pixel size ${width}x${height} too small`);
+            if (sw < 10 || sh < 10) {
+                throw new Error(`Degenerate bbox: pixel size ${sw}x${sh} too small`);
             }
 
-            // ─── BUG 2 FIX: Crop by drawing from pre-rendered canvas into a white-filled canvas ───
-            const cropCanvas = createCanvas(width, height);
-            const cropCtx = cropCanvas.getContext('2d');
-            // White background for the crop
-            cropCtx.fillStyle = '#ffffff';
-            cropCtx.fillRect(0, 0, width, height);
-            // Draw the relevant portion of the full-page canvas
-            cropCtx.drawImage(
-                fullPageCanvas,
-                Math.round(left), Math.round(top), width, height,  // source rect
-                0, 0, width, height                                  // dest rect
-            );
-
-            return await cropCanvas.encode('png');
+            try {
+                if (!entry.image) {
+                    entry.image = await loadImage(await pageCanvas.encode('png'));
+                }
+                const out = createCanvas(sw, sh);
+                const outCtx = out.getContext('2d');
+                outCtx.fillStyle = '#ffffff';
+                outCtx.fillRect(0, 0, sw, sh);
+                outCtx.drawImage(entry.image, sx, sy, sw, sh, 0, 0, sw, sh);
+                return await out.encode('png');
+            } catch (drawErr) {
+                logger.warn(`[crop.service] drawImage path failed (${drawErr.message}); falling back to raw-pixel crop via sharp`);
+                const sharp = (await import('sharp')).default;
+                const px = pageCanvas.getContext('2d').getImageData(sx, sy, sw, sh);
+                return await sharp(
+                    Buffer.from(px.data.buffer, px.data.byteOffset, px.data.byteLength),
+                    { raw: { width: sw, height: sh, channels: 4 } }
+                ).flatten({ background: '#ffffff' }).png().toBuffer();
+            }
         },
         cleanup: async () => {
             for (const entry of renderedPages.values()) {
