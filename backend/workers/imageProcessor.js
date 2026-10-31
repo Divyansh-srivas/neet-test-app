@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { supabaseAdmin } from '../config/supabase.js';
+import { supabaseAdmin, DIAGRAM_BUCKET } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 import { queues } from '../queue/index.js';
 import { ensureLocalFile } from '../services/storageSync.js';
@@ -56,7 +56,7 @@ function isImplausibleBox(box) {
 }
 
 // ─── BUG 3c FIX: Retry storage upload once ───
-async function uploadWithRetry(bucket, fileName, buffer, options, maxRetries = 1) {
+async function uploadWithRetry(bucket = DIAGRAM_BUCKET, fileName, buffer, options, maxRetries = 1) {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
             const { error } = await supabaseAdmin.storage
@@ -67,18 +67,18 @@ async function uploadWithRetry(bucket, fileName, buffer, options, maxRetries = 1
                 return publicUrlData.publicUrl;
             }
             if (attempt < maxRetries) {
-                logger.warn(`[imageProcessor] Upload attempt ${attempt + 1} failed: ${error.message}, retrying...`);
+                logger.warn(`[imageProcessor] Upload attempt ${attempt + 1} to '${bucket}' failed: ${error.message}, retrying...`);
                 await new Promise(r => setTimeout(r, 2000));
             } else {
-                logger.warn(`[imageProcessor] Upload failed after ${maxRetries + 1} attempts: ${error.message}`);
+                logger.warn(`[imageProcessor] Upload to '${bucket}' failed after ${maxRetries + 1} attempts: ${error.message}`);
                 return null;
             }
         } catch (e) {
             if (attempt < maxRetries) {
-                logger.warn(`[imageProcessor] Upload exception attempt ${attempt + 1}: ${e.message}, retrying...`);
+                logger.warn(`[imageProcessor] Upload exception to '${bucket}' attempt ${attempt + 1}: ${e.message}, retrying...`);
                 await new Promise(r => setTimeout(r, 2000));
             } else {
-                logger.warn(`[imageProcessor] Upload exception after ${maxRetries + 1} attempts: ${e.message}`);
+                logger.warn(`[imageProcessor] Upload exception to '${bucket}' after ${maxRetries + 1} attempts: ${e.message}`);
                 return null;
             }
         }
@@ -218,7 +218,7 @@ async function extractImages(pdfBuffer, questions, jobId) {
                         const fileName = `diagrams/${jobId}_p${q.imageBox.page}_q${qNum}_${Date.now()}.png`;
 
                         // ─── BUG 3c FIX: Upload with retry ───
-                        let finalUrl = await uploadWithRetry('uploads', fileName, croppedBuffer, { contentType: 'image/png', upsert: true });
+                        let finalUrl = await uploadWithRetry(DIAGRAM_BUCKET, fileName, croppedBuffer, { contentType: 'image/png', upsert: true });
 
                         // RULE 2: No silent nulls! If storage failed, use data URL so image is NEVER null
                         if (!finalUrl) {
@@ -241,7 +241,7 @@ async function extractImages(pdfBuffer, questions, jobId) {
                             const optBuffer = await processor.cropRegion(optBox.page, optBox.box);
                             const optFileName = `diagrams/${jobId}_p${optBox.page}_q${qNum}_opt${optKey}_${Date.now()}.png`;
 
-                            let optUrl = await uploadWithRetry('uploads', optFileName, optBuffer, { contentType: 'image/png', upsert: true });
+                            let optUrl = await uploadWithRetry(DIAGRAM_BUCKET, optFileName, optBuffer, { contentType: 'image/png', upsert: true });
 
                             // Rule 2: Fallback to base64 if storage fails
                             if (!optUrl) {

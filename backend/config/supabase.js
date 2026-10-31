@@ -30,3 +30,5 @@ export const createScopedClient = (token) => {
         auth: { persistSession: false }
     });
 };
+
+export const DIAGRAM_BUCKET = process.env.DIAGRAM_BUCKET || 'diagrams';

@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '../config/supabase.js';
+import { supabaseAdmin, DIAGRAM_BUCKET } from '../config/supabase.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 
@@ -129,7 +129,7 @@ export const uploadImage = async (req, res) => {
         const fileName = `library-images/${uuidv4()}_${Date.now()}.png`;
 
         const { error: uploadError } = await supabaseAdmin.storage
-            .from('uploads')
+            .from(DIAGRAM_BUCKET)
             .upload(fileName, fileBuffer, { contentType: req.file.mimetype, upsert: true });
 
         // Clean up temp file
@@ -137,7 +137,7 @@ export const uploadImage = async (req, res) => {
 
         if (uploadError) throw uploadError;
 
-        const { data: publicUrlData } = supabaseAdmin.storage.from('uploads').getPublicUrl(fileName);
+        const { data: publicUrlData } = supabaseAdmin.storage.from(DIAGRAM_BUCKET).getPublicUrl(fileName);
         res.json({ url: publicUrlData.publicUrl });
     } catch (e) {
         res.status(500).json({ error: e.message });

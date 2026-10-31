@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger.js';
-import { supabaseAdmin } from '../config/supabase.js';
+import { supabaseAdmin, DIAGRAM_BUCKET } from '../config/supabase.js';
 import { getTotalPages, splitPdfDocIntoChunk } from '../services/pdf.service.js';
 import { PDFDocument } from 'pdf-lib';
 import { extractQuestionsFromSinglePage } from '../services/gemini.service.js';
@@ -150,12 +150,12 @@ export const uploadAndExtractDirect = async (req, res) => {
 
                                                 try {
                                                     const { error: uploadError } = await supabaseAdmin.storage
-                                                        .from('uploads')
+                                                        .from(DIAGRAM_BUCKET)
                                                         .upload(fileName, croppedImageBuffer, { contentType: 'image/png', upsert: true });
 
                                                     if (!uploadError) {
                                                         const { data: publicUrlData } = supabaseAdmin.storage
-                                                            .from('uploads')
+                                                            .from(DIAGRAM_BUCKET)
                                                             .getPublicUrl(fileName);
                                                         finalUrl = publicUrlData.publicUrl;
                                                     }
@@ -183,10 +183,10 @@ export const uploadAndExtractDirect = async (req, res) => {
 
                                                     try {
                                                         const { error: optUploadErr } = await supabaseAdmin.storage
-                                                            .from('uploads')
+                                                            .from(DIAGRAM_BUCKET)
                                                             .upload(optFileName, optBuffer, { contentType: 'image/png', upsert: true });
                                                         if (!optUploadErr) {
-                                                            const { data: optUrlData } = supabaseAdmin.storage.from('uploads').getPublicUrl(optFileName);
+                                                            const { data: optUrlData } = supabaseAdmin.storage.from(DIAGRAM_BUCKET).getPublicUrl(optFileName);
                                                             optUrl = optUrlData.publicUrl;
                                                         }
                                                     } catch (upErr) {}
