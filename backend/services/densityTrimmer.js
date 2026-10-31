@@ -1,7 +1,13 @@
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.js';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
+import * as napiCanvas from '@napi-rs/canvas';
 import { supabaseAdmin } from '../config/supabase.js';
 import { randomUUID } from 'crypto';
+
+// Force pdf.js to use the SAME canvas implementation we render with.
+for (const k of ['ImageData', 'Path2D', 'DOMMatrix']) {
+    if (napiCanvas[k]) globalThis[k] = napiCanvas[k];
+}
 
 /**
  * Renders the PDF page to canvas, trims text leakage from the top/bottom 

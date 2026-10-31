@@ -140,7 +140,7 @@ async function extractImages(pdfBuffer, questions, jobId) {
                     try {
                         croppedBuffer = await processor.cropRegion(q.imageBox.page, q.imageBox.box);
                     } catch (cropErr) {
-                        logger.warn(`[imageProcessor] Primary crop failed for Q${qNum}: ${cropErr.message}. Trying column band fallback...`);
+                        logger.warn(`[imageProcessor] Primary crop failed for Q${qNum}: ${cropErr.message} | stack: ${(cropErr.stack || '').split('\n').slice(0, 6).join(' <- ')}. Trying column band fallback...`);
                         cropFailures++;
                         try {
                             const fallbackBand = getQuestionColumnBandBox(pdfBuffer, qNum, -1, stem);
@@ -148,7 +148,7 @@ async function extractImages(pdfBuffer, questions, jobId) {
                                 croppedBuffer = await processor.cropRegion(fallbackBand.page, fallbackBand);
                             }
                         } catch (fbErr) {
-                            logger.error(`[imageProcessor] Fallback crop also failed for Q${qNum}: ${fbErr.message}`);
+                            logger.error(`[imageProcessor] Fallback crop also failed for Q${qNum}: ${fbErr.message} | stack: ${(fbErr.stack || '').split('\n').slice(0, 6).join(' <- ')}`);
                             cropFailures++;
                         }
                     }
@@ -192,7 +192,7 @@ async function extractImages(pdfBuffer, questions, jobId) {
                             processedImages++;
                             logger.info(`[imageProcessor] Set option image for Q${qNum} opt=${optKey}`);
                         } catch (optCropErr) {
-                            logger.error(`[imageProcessor] Skipping option image qNum=${qNum} opt=${optKey}: ${optCropErr.message}`);
+                            logger.error(`[imageProcessor] Skipping option image qNum=${qNum} opt=${optKey}: ${optCropErr.message} | stack: ${(optCropErr.stack || '').split('\n').slice(0, 6).join(' <- ')}`);
                             cropFailures++;
                         }
                     }
