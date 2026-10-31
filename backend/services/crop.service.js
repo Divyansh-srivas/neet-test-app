@@ -10,7 +10,7 @@ for (const k of ['ImageData', 'Path2D', 'DOMMatrix']) {
 
 const leakedDocs = [];
 
-class NapiCanvasFactory {
+export class NapiCanvasFactory {
     create(width, height) {
         if (width <= 0 || height <= 0) throw new Error('Invalid canvas size');
         const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
@@ -47,7 +47,8 @@ export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
             data: uint8Array,
             useSystemFonts: true,
             disableFontFace: true,
-            CanvasFactory: NapiCanvasFactory
+            CanvasFactory: NapiCanvasFactory,
+            canvasFactory: new NapiCanvasFactory()
         });
         
         pdfDocument = await loadingTask.promise;
@@ -135,7 +136,8 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
             data: uint8Array,
             useSystemFonts: true,
             disableFontFace: true,
-            CanvasFactory: NapiCanvasFactory
+            CanvasFactory: NapiCanvasFactory,
+            canvasFactory: new NapiCanvasFactory()
         });
         
         pdfDocument = await loadingTask.promise;
@@ -224,7 +226,8 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
         data: uint8Array,
         useSystemFonts: true,
         disableFontFace: true,
-        CanvasFactory: NapiCanvasFactory
+        CanvasFactory: NapiCanvasFactory,
+        canvasFactory: new NapiCanvasFactory()
     });
     
     // Wrapper timeout for the entire loading process to prevent infinite hangs

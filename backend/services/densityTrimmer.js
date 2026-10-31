@@ -3,6 +3,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import * as napiCanvas from '@napi-rs/canvas';
 import { supabaseAdmin } from '../config/supabase.js';
 import { randomUUID } from 'crypto';
+import { NapiCanvasFactory } from './crop.service.js';
 
 // Force pdf.js to use the SAME canvas implementation we render with.
 for (const k of ['ImageData', 'Path2D', 'DOMMatrix']) {
@@ -37,7 +38,13 @@ export async function cropAndUploadDiagram(pdfBuffer, box, testId, qNum) {
     let page = null;
     try {
         const data = new Uint8Array(pdfBuffer);
-        doc = await getDocument({ data, disableFontFace: true, standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/' }).promise;
+        doc = await getDocument({
+            data,
+            disableFontFace: true,
+            standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/',
+            CanvasFactory: NapiCanvasFactory,
+            canvasFactory: new NapiCanvasFactory()
+        }).promise;
         page = await doc.getPage(1);
         const scale = 2.5;
         const viewport = page.getViewport({ scale });
@@ -270,7 +277,13 @@ export async function uploadSmartFallbackDiagram(pdfBuffer, box, testId, qNum) {
     let page = null;
     try {
         const data = new Uint8Array(pdfBuffer);
-        doc = await getDocument({ data, disableFontFace: true, standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/' }).promise;
+        doc = await getDocument({
+            data,
+            disableFontFace: true,
+            standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/',
+            CanvasFactory: NapiCanvasFactory,
+            canvasFactory: new NapiCanvasFactory()
+        }).promise;
         page = await doc.getPage(1);
         const scale = 2.0; // Slightly lower scale for fallback to save space/bandwidth
         const viewport = page.getViewport({ scale });
