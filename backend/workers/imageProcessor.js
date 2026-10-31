@@ -13,17 +13,46 @@ import {
 // ─── BUG 3a FIX: Configurable deadline (default 420s = 7 min) checked between questions ───
 const IMAGE_EXTRACTION_TIMEOUT_MS = parseInt(process.env.IMAGE_EXTRACTION_TIMEOUT_MS || '420000', 10);
 
-// ─── BUG 3b FIX: Reject implausible Gemini imageBox ───
-function isImplausibleBox(box) {
-    if (!box || !Array.isArray(box) || box.length < 4) return true;
-    const [ymin, xmin, ymax, xmax] = box;
+// ─── Figure crop box helpers ───
+export function expandCropBox(box, pad = 0.02) {
+    // box = [ymin, xmin, ymax, xmax] normalized 0-1
+    const [y1, x1, y2, x2] = box;
+    return [Math.max(0, y1 - pad), Math.max(0, x1 - pad), Math.min(1, y2 + pad), Math.min(1, x2 + pad)];
+}
+
+export function unionBox(a, b) {
+    return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
+}
+
+export function normalizeBox(box) {
+    if (!box) return null;
+    let b = Array.isArray(box) ? [...box] : [box.ymin, box.xmin, box.ymax, box.xmax];
+    if (b.length < 4 || b.some(v => v === undefined || isNaN(v))) return null;
+    let [y1, x1, y2, x2] = b;
+    if (y1 > 1 || x1 > 1 || y2 > 1 || x2 > 1) {
+        y1 /= 1000;
+        x1 /= 1000;
+        y2 /= 1000;
+        x2 /= 1000;
+    }
+    return [y1, x1, y2, x2];
+}
+
+export function isSaneBox(box) {
+    const norm = normalizeBox(box);
+    if (!norm) return false;
+    const [ymin, xmin, ymax, xmax] = norm;
     // Inverted coordinates
-    if (ymax <= ymin || xmax <= xmin) return true;
+    if (ymax <= ymin || xmax <= xmin) return false;
     // Sliver (< 1% in either dimension)
-    if ((ymax - ymin) < 0.01 || (xmax - xmin) < 0.01) return true;
+    if ((ymax - ymin) < 0.01 || (xmax - xmin) < 0.01) return false;
     // Whole page (> 95% area)
-    if ((ymax - ymin) * (xmax - xmin) > 0.95) return true;
-    return false;
+    if ((ymax - ymin) * (xmax - xmin) > 0.95) return false;
+    return true;
+}
+
+function isImplausibleBox(box) {
+    return !isSaneBox(box);
 }
 
 // ─── BUG 3c FIX: Retry storage upload once ───
@@ -92,44 +121,76 @@ async function extractImages(pdfBuffer, questions, jobId) {
                     q.hasVisualOptions = true;
                 }
 
-                // If question needs a diagram and has no imageBox yet, deterministically recover it
-                if (needsFigure && (!q.imageBox || !q.imageBox.page)) {
-                    const recovered = findDeterministicDiagramBox(pdfBuffer, qNum, stem, -1);
-                    if (recovered && recovered.page) {
-                        // ─── BUG 3b FIX: Reject implausible box ───
-                        if (!isImplausibleBox(recovered)) {
-                            q.imageBox = { page: recovered.page, box: recovered };
-                            q.diagramBox = q.imageBox;
-                            logger.info(`[imageProcessor] Deterministically recovered diagram for Q${qNum}: page ${recovered.page}, box=[${recovered.join(', ')}]`);
+                // ─── EXPAND FIGURE CROP BOXES (Union with detector box + padding) ───
+                const boxSource = q.imageBox || q.diagramBox;
+                const rawGeminiBox = boxSource?.box || (Array.isArray(boxSource) ? boxSource : null);
+                const geminiPage = boxSource?.page;
+                const geminiBox = rawGeminiBox ? normalizeBox(rawGeminiBox) : null;
+
+                if (geminiBox && isSaneBox(geminiBox) && geminiPage) {
+                    let detectorBox = null;
+                    try {
+                        detectorBox = findDeterministicDiagramBox(pdfBuffer, qNum, stem, geminiPage - 1);
+                    } catch (detErr) {
+                        logger.warn(`[imageProcessor] findDeterministicDiagramBox failed for Q${qNum}: ${detErr.message}`);
+                    }
+
+                    let finalBox;
+                    if (detectorBox && detectorBox.page === geminiPage) {
+                        const normDetBox = normalizeBox(detectorBox);
+                        const candidateBox = expandCropBox(unionBox(geminiBox, normDetBox));
+                        const geminiArea = (geminiBox[2] - geminiBox[0]) * (geminiBox[3] - geminiBox[1]);
+                        const candidateArea = (candidateBox[2] - candidateBox[0]) * (candidateBox[3] - candidateBox[1]);
+
+                        // Safety rule: if the resulting box area is more than 0.55 of the page,
+                        // or it is larger than 2.5x the Gemini box area, fall back to expandCropBox(geminiBox, 0.03) instead.
+                        if (candidateArea > 0.55 || (geminiArea > 0 && candidateArea > 2.5 * geminiArea)) {
+                            logger.warn(`[imageProcessor] Q${qNum}: union box exceeded safety limit (candidateArea=${candidateArea.toFixed(3)}, geminiArea=${geminiArea.toFixed(3)}). Falling back to expandCropBox(geminiBox, 0.03)`);
+                            finalBox = expandCropBox(geminiBox, 0.03);
                         } else {
-                            logger.warn(`[imageProcessor] Rejected implausible deterministic box for Q${qNum}: [${recovered.join(', ')}]`);
-                            // Fall through to column band fallback
+                            finalBox = candidateBox;
                         }
+                    } else {
+                        finalBox = expandCropBox(geminiBox, 0.03);
                     }
-                }
 
-                // If still no valid imageBox but needs figure, try column band fallback
-                if (needsFigure && (!q.imageBox || !q.imageBox.page)) {
-                    const fallbackBand = getQuestionColumnBandBox(pdfBuffer, qNum, -1, stem);
-                    if (fallbackBand && fallbackBand.page) {
-                        q.imageBox = { page: fallbackBand.page, box: fallbackBand };
-                        q.diagramBox = q.imageBox;
-                        logger.info(`[imageProcessor] Applied column band fallback box for Q${qNum}: page ${fallbackBand.page}`);
-                    }
-                }
-
-                // ─── BUG 3b FIX: Validate existing Gemini imageBox before cropping ───
-                if (q.imageBox && q.imageBox.box && isImplausibleBox(q.imageBox.box)) {
+                    q.imageBox = { page: geminiPage, box: finalBox };
+                    q.diagramBox = q.imageBox;
+                    logger.info(`[imageProcessor] Q${qNum}: geminiBox=[${geminiBox.map(n => n.toFixed(4)).join(', ')}], detectorBox=${detectorBox ? `[${detectorBox.map(n => n.toFixed(4)).join(', ')}] (p${detectorBox.page})` : 'null'}, finalBox=[${finalBox.map(n => n.toFixed(4)).join(', ')}]`);
+                } else if (q.imageBox && q.imageBox.box && !isSaneBox(q.imageBox.box)) {
                     logger.warn(`[imageProcessor] Rejecting implausible Gemini imageBox for Q${qNum}: [${q.imageBox.box}]. Recovering with deterministic detection.`);
                     const recovered = findDeterministicDiagramBox(pdfBuffer, qNum, stem, -1);
-                    if (recovered && recovered.page && !isImplausibleBox(recovered)) {
-                        q.imageBox = { page: recovered.page, box: recovered };
+                    if (recovered && recovered.page && isSaneBox(recovered)) {
+                        const finalBox = expandCropBox(normalizeBox(recovered), 0.02);
+                        q.imageBox = { page: recovered.page, box: finalBox };
+                        q.diagramBox = q.imageBox;
+                        logger.info(`[imageProcessor] Q${qNum}: geminiBox=rejected, detectorBox=[${recovered.map(n => n.toFixed(4)).join(', ')}], finalBox=[${finalBox.map(n => n.toFixed(4)).join(', ')}]`);
                     } else {
                         const fallbackBand = getQuestionColumnBandBox(pdfBuffer, qNum, -1, stem);
                         if (fallbackBand && fallbackBand.page) {
                             q.imageBox = { page: fallbackBand.page, box: fallbackBand };
+                            q.diagramBox = q.imageBox;
+                            logger.info(`[imageProcessor] Applied column band fallback box for Q${qNum}: page ${fallbackBand.page}`);
                         } else {
                             q.imageBox = null;
+                        }
+                    }
+                }
+
+                // If question needs a diagram and has no imageBox yet, deterministically recover it
+                if (needsFigure && (!q.imageBox || !q.imageBox.page)) {
+                    const recovered = findDeterministicDiagramBox(pdfBuffer, qNum, stem, -1);
+                    if (recovered && recovered.page && isSaneBox(recovered)) {
+                        const finalBox = expandCropBox(normalizeBox(recovered), 0.02);
+                        q.imageBox = { page: recovered.page, box: finalBox };
+                        q.diagramBox = q.imageBox;
+                        logger.info(`[imageProcessor] Q${qNum}: geminiBox=null, detectorBox=[${recovered.map(n => n.toFixed(4)).join(', ')}], finalBox=[${finalBox.map(n => n.toFixed(4)).join(', ')}]`);
+                    } else {
+                        const fallbackBand = getQuestionColumnBandBox(pdfBuffer, qNum, -1, stem);
+                        if (fallbackBand && fallbackBand.page) {
+                            q.imageBox = { page: fallbackBand.page, box: fallbackBand };
+                            q.diagramBox = q.imageBox;
+                            logger.info(`[imageProcessor] Applied column band fallback box for Q${qNum}: page ${fallbackBand.page}`);
                         }
                     }
                 }
