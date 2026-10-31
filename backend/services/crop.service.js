@@ -2,6 +2,26 @@ import { getDocument } from 'pdfjs-dist/legacy/build/pdf.js';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { logger } from '../utils/logger.js';
 
+const leakedDocs = [];
+
+class NapiCanvasFactory {
+    create(width, height) {
+        if (width <= 0 || height <= 0) throw new Error('Invalid canvas size');
+        const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
+        return { canvas, context: canvas.getContext('2d') };
+    }
+    reset(cc, width, height) {
+        cc.canvas.width = Math.ceil(width);
+        cc.canvas.height = Math.ceil(height);
+    }
+    destroy(cc) {
+        cc.canvas.width = 0;
+        cc.canvas.height = 0;
+        cc.canvas = null;
+        cc.context = null;
+    }
+}
+
 /**
  * Renders a specific region of a 1-page PDF to a PNG buffer.
  * @param {Buffer} pdfBuffer - The single-page PDF buffer
@@ -20,7 +40,8 @@ export const cropPdfRegionToImage = async (pdfBuffer, bbox) => {
         const loadingTask = getDocument({
             data: uint8Array,
             useSystemFonts: true,
-            disableFontFace: true
+            disableFontFace: true,
+            CanvasFactory: NapiCanvasFactory
         });
         
         pdfDocument = await loadingTask.promise;
@@ -107,7 +128,8 @@ export const cropMultiPagePdfRegionToImage = async (pdfBuffer, pageNum, bbox) =>
         const loadingTask = getDocument({
             data: uint8Array,
             useSystemFonts: true,
-            disableFontFace: true
+            disableFontFace: true,
+            CanvasFactory: NapiCanvasFactory
         });
         
         pdfDocument = await loadingTask.promise;
@@ -195,7 +217,8 @@ export const createPdfImageProcessor = async (pdfBuffer) => {
     const loadingTask = getDocument({
         data: uint8Array,
         useSystemFonts: true,
-        disableFontFace: true
+        disableFontFace: true,
+        CanvasFactory: NapiCanvasFactory
     });
     
     // Wrapper timeout for the entire loading process to prevent infinite hangs
