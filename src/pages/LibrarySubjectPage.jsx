@@ -133,7 +133,7 @@ export default function LibrarySubjectPage({ subject, onBack, onStartPracticeQui
                   onClick={() => onStartPracticeQuiz(subject)}
                   disabled={chapter.question_count === 0}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 999, border: 'none',
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 999,
                     background: chapter.question_count === 0 ? 'rgba(255,255,255,0.05)' : theme.bg,
                     color: chapter.question_count === 0 ? 'var(--muted)' : theme.color,
                     cursor: chapter.question_count === 0 ? 'not-allowed' : 'pointer',

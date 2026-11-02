@@ -59,6 +59,8 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
 
   // Anti-Cheating & Proctoring State
   const [violationCount, setViolationCount] = useState(0)
+  const [sessionViolations, setSessionViolations] = useState([])
+  const [pipMinimized, setPipMinimized] = useState(false)
   const [showViolationWarning, setShowViolationWarning] = useState(false)
   const [violationReason, setViolationReason] = useState('Exited Fullscreen')
   const MAX_VIOLATIONS = 5
@@ -254,6 +256,14 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
         setViolationCount(newCount);
         setViolationReason(violationType);
 
+        const violRecord = {
+          id: 'v_' + Date.now(),
+          violation_type: violationType,
+          created_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          snapshot: snapshotBase64
+        };
+        setSessionViolations(prev => [...prev, violRecord]);
+
         try {
           localStorage.setItem(`attempt_${test?.id}_violations`, String(newCount));
           if (attemptId) localStorage.setItem(`attempt_${attemptId}_violations`, String(newCount));
@@ -360,7 +370,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
     Object.keys(questionStates).forEach(k => {
       if (questionStates[k].selectedOption) legacyAnswers[k] = questionStates[k].selectedOption
     })
-    const completed = { ...test, answers: legacyAnswers, completed: true, completedAt: Date.now(), finalScore: score, maxScore, timeTaken: totalSeconds - timeLeft }
+    const completed = { ...test, attemptId, answers: legacyAnswers, completed: true, completedAt: Date.now(), finalScore: score, maxScore, timeTaken: totalSeconds - timeLeft, violation_count: violationCount, violations: sessionViolations }
     saveTest(completed)
     
     // Trigger notification
@@ -976,59 +986,73 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
 
       {/* Floating Camera Proctoring PiP Feed */}
       {isCameraMode && (
-        <div style={{
-          position: 'fixed',
-          bottom: 20,
-          right: 20,
-          width: 154,
-          background: 'var(--surface, #111827)',
-          border: '1px solid var(--border, #1f2d45)',
-          borderRadius: 14,
-          overflow: 'hidden',
-          boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
-          zIndex: 90
-        }}>
-          <div style={{ position: 'relative', width: 154, height: 115, background: '#0b0f19' }}>
-            <video
-              ref={videoRef}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
-              autoPlay
-              playsInline
-              muted
-            />
-            <div style={{
-              position: 'absolute',
-              top: 6,
-              left: 6,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '2px 8px',
-              borderRadius: 99,
-              background: 'rgba(0,0,0,0.75)',
-              fontSize: 10,
-              fontWeight: 700,
-              color: cameraWarningText ? '#fbbf24' : (cameraActive ? '#34d399' : '#94a3b8')
-            }}>
-              <span style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: cameraWarningText ? '#fbbf24' : (cameraActive ? '#34d399' : '#64748b'),
-                boxShadow: cameraActive ? (cameraWarningText ? '0 0 6px #fbbf24' : '0 0 6px #34d399') : 'none'
-              }} />
-              {cameraWarningText ? 'Alert' : (cameraActive ? 'Proctored' : 'Initializing')}
+        <div
+          className="camera-pip-widget"
+          style={{
+            position: 'fixed',
+            background: 'var(--surface, #111827)',
+            border: '1px solid var(--border, #1f2d45)',
+            borderRadius: 14,
+            overflow: 'hidden',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
+            zIndex: 90,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          {pipMinimized ? (
+            <div
+              onClick={() => setPipMinimized(false)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                background: 'var(--surface2)', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#34d399'
+              }}
+              title="Click to expand camera preview"
+            >
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399' }} />
+              📷 Proctored
             </div>
-          </div>
-          {cameraWarningText && (
-            <div style={{
-              padding: '4px 6px',
-              fontSize: 10,
-              color: '#fbbf24',
-              background: 'rgba(251, 191, 36, 0.15)',
-              textAlign: 'center',
-              fontWeight: 600,
-              borderTop: '1px solid rgba(251, 191, 36, 0.2)'
-            }}>
-              ⚠️ {cameraWarningText}
+          ) : (
+            <div>
+              <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 80, background: '#0b0f19' }}>
+                <video
+                  ref={videoRef}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', display: 'block' }}
+                  autoPlay
+                  playsInline
+                  muted
+                />
+                <div style={{
+                  position: 'absolute', top: 5, left: 5, display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '2px 6px', borderRadius: 99, background: 'rgba(0,0,0,0.75)', fontSize: 9, fontWeight: 700,
+                  color: cameraWarningText ? '#fbbf24' : (cameraActive ? '#34d399' : '#94a3b8')
+                }}>
+                  <span style={{
+                    width: 5, height: 5, borderRadius: '50%',
+                    background: cameraWarningText ? '#fbbf24' : (cameraActive ? '#34d399' : '#64748b'),
+                    boxShadow: cameraActive ? (cameraWarningText ? '0 0 6px #fbbf24' : '0 0 6px #34d399') : 'none'
+                  }} />
+                  {cameraWarningText ? 'Alert' : (cameraActive ? 'Proctored' : 'Initializing')}
+                </div>
+                <button
+                  onClick={() => setPipMinimized(true)}
+                  title="Minimize camera preview"
+                  style={{
+                    position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)',
+                    border: 'none', color: '#fff', borderRadius: '50%', width: 18, height: 18,
+                    fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                >
+                  ─
+                </button>
+              </div>
+              {cameraWarningText && (
+                <div style={{
+                  padding: '4px 6px', fontSize: 10, color: '#fbbf24', background: 'rgba(251, 191, 36, 0.15)',
+                  textAlign: 'center', fontWeight: 600, borderTop: '1px solid rgba(251, 191, 36, 0.2)'
+                }}>
+                  ⚠️ {cameraWarningText}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1039,12 +1063,27 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
         .mobile-palette-toggle { display: none !important; }
         .palette-mobile-overlay { display: none !important; }
         
+        .camera-pip-widget {
+          bottom: 80px;
+          right: 20px;
+          width: 145px;
+        }
+
         @media (max-width: 900px) { 
           .palette-desktop { display: none !important; } 
           .mobile-palette-toggle { display: flex !important; align-items: center; justify-content: center; }
           .palette-mobile-overlay { display: flex !important; }
           .mobile-only-close { display: block !important; }
           .hide-on-mobile { display: none !important; }
+        }
+
+        @media (max-width: 640px) {
+          .camera-pip-widget {
+            top: 56px;
+            bottom: auto;
+            right: 10px;
+            width: 95px;
+          }
         }
       `}</style>
     </div>

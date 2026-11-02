@@ -118,3 +118,24 @@ export const recordViolation = async (attemptId, studentId, violationType, snaps
 
   return newCount;
 }
+
+// Retrieves audit log of violations for an attempt
+export const getAttemptViolations = async (attemptId) => {
+  if (!attemptId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('test_violations')
+      .select('id, attempt_id, student_id, violation_type, created_at, snapshot, browser, device')
+      .eq('attempt_id', attemptId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn("Error fetching test_violations from DB:", error);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn("Exception fetching attempt violations:", err);
+    return [];
+  }
+}

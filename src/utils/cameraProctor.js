@@ -1,11 +1,13 @@
 /**
  * Client-side Camera Proctoring & Frame Analysis Engine.
  * Captures video frames, computes lighting/variance, detects face presence,
- * estimates head pose, drives the ProctoringStateMachine, and captures small snapshots (<=20KB).
+ * estimates head pose with MediaPipe FaceLandmarker, drives the ProctoringStateMachine,
+ * and captures small snapshots (<=20KB).
  */
 
 import { PROCTORING_CONFIG } from '../config/proctoring.js';
-import { ProctoringStateMachine } from './proctoringStateMachine.js';
+import { ProctoringStateMachine, VIOLATION_TYPES } from './proctoringStateMachine.js';
+import { getFaceLandmarker, extractHeadPose } from './faceLandmarker.js';
 
 export class CameraProctor {
   constructor({
@@ -28,7 +30,23 @@ export class CameraProctor {
     this.isRunning = false;
     this.offscreenCanvas = null;
     this.offscreenCtx = null;
+    this.landmarker = null;
     this.faceDetector = null;
+    this.isCameraLost = false;
+
+    // Bound listeners for stream disconnection
+    this._handleTrackEnded = this._handleTrackEnded.bind(this);
+    this._handleTrackMute = this._handleTrackMute.bind(this);
+  }
+
+  _handleTrackEnded() {
+    console.warn('[CameraProctor] Video track ended unexpectedly (CAMERA_LOST)');
+    this.isCameraLost = true;
+  }
+
+  _handleTrackMute() {
+    console.warn('[CameraProctor] Video track muted (CAMERA_LOST)');
+    this.isCameraLost = true;
   }
 
   /**
@@ -54,6 +72,12 @@ export class CameraProctor {
         audio: false
       });
 
+      const videoTrack = this.stream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.addEventListener('ended', this._handleTrackEnded);
+        videoTrack.addEventListener('mute', this._handleTrackMute);
+      }
+
       if (this.videoElement) {
         this.videoElement.srcObject = this.stream;
         this.videoElement.playsInline = true;
@@ -72,16 +96,28 @@ export class CameraProctor {
     this.offscreenCanvas.height = PROCTORING_CONFIG.SNAPSHOT_HEIGHT;
     this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
 
-    // 3. Initialize Face Detector (Shape Detection API or lightweight heuristic fallback)
+    // 3. Initialize Face Landmarker (MediaPipe WASM + .task model with resilient fallback)
     try {
-      if (typeof window !== 'undefined' && 'FaceDetector' in window) {
-        this.faceDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
+      this.landmarker = await getFaceLandmarker({
+        wasmPath: '/models/wasm',
+        modelPath: '/models/face_landmarker.task',
+        runningMode: 'VIDEO',
+        numFaces: 2
+      });
+      console.log('[CameraProctor] MediaPipe FaceLandmarker loaded successfully.');
+    } catch (modelErr) {
+      console.warn('[CameraProctor] MediaPipe unavailable, falling back to browser Shape Detection or heuristic:', modelErr);
+      try {
+        if (typeof window !== 'undefined' && 'FaceDetector' in window) {
+          this.faceDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
+        }
+      } catch (nativeErr) {
+        console.warn('[CameraProctor] Native FaceDetector unavailable:', nativeErr);
       }
-    } catch (e) {
-      console.warn('[CameraProctor] Native FaceDetector unavailable, using heuristic fallback:', e);
     }
 
     this.isRunning = true;
+    this.isCameraLost = false;
     this.stateMachine.reset(Date.now(), this.stateMachine.getViolationCount());
 
     // 4. Start analysis loop
@@ -96,7 +132,32 @@ export class CameraProctor {
    * Captures and evaluates a single frame from the video element.
    */
   async _analyzeCurrentFrame() {
-    if (!this.isRunning || !this.videoElement || this.videoElement.readyState < 2) {
+    if (!this.isRunning) return;
+
+    const timestamp = Date.now();
+
+    // Check if camera stream has been lost / disconnected mid-exam
+    const videoTrack = this.stream?.getVideoTracks()?.[0];
+    const trackEnded = !videoTrack || videoTrack.readyState === 'ended' || videoTrack.muted;
+    if (this.isCameraLost || trackEnded) {
+      const frameResult = this.stateMachine.processFrame({
+        timestamp,
+        cameraLost: true
+      });
+      this.onStateChange(frameResult);
+      if (frameResult.status === 'violation' && frameResult.violationType) {
+        this.onViolation({
+          violationType: VIOLATION_TYPES.CAMERA_LOST,
+          violationCount: frameResult.violationCount,
+          autoSubmit: frameResult.autoSubmit,
+          snapshotBase64: null,
+          timestamp
+        });
+      }
+      return;
+    }
+
+    if (!this.videoElement || this.videoElement.readyState < 2) {
       return;
     }
 
@@ -120,9 +181,8 @@ export class CameraProctor {
     const { brightness, variance } = this._computeImageMetrics(imgData);
 
     // Face detection & head pose estimation
-    const detectionResult = await this._detectFaces(imgData);
+    const detectionResult = await this._detectFaces(imgData, timestamp);
 
-    const timestamp = Date.now();
     const frameResult = this.stateMachine.processFrame({
       timestamp,
       faceCount: detectionResult.faceCount,
@@ -148,9 +208,27 @@ export class CameraProctor {
   }
 
   /**
-   * Detects faces and estimates head pose using available detector or pixel heuristics.
+   * Detects faces and estimates head pose using MediaPipe, native detector, or heuristic fallback.
    */
-  async _detectFaces(imgData) {
+  async _detectFaces(imgData, timestamp) {
+    // 1. MediaPipe FaceLandmarker
+    if (this.landmarker && this.videoElement) {
+      try {
+        const mpResult = this.landmarker.detectForVideo(this.videoElement, timestamp);
+        if (mpResult && mpResult.faceLandmarks) {
+          const faceCount = mpResult.faceLandmarks.length;
+          if (faceCount > 0) {
+            const headPose = extractHeadPose(mpResult, 0);
+            return { faceCount, headPose };
+          }
+          return { faceCount: 0, headPose: { yaw: 0, pitch: 0 } };
+        }
+      } catch (err) {
+        console.warn('[CameraProctor] MediaPipe detection frame error:', err);
+      }
+    }
+
+    // 2. Native Shape Detection API fallback
     if (this.faceDetector) {
       try {
         const detectedFaces = await this.faceDetector.detect(this.offscreenCanvas);
@@ -165,23 +243,21 @@ export class CameraProctor {
       }
     }
 
-    // Heuristic face presence & centroid detector based on skin color and face contrast
+    // 3. Heuristic face presence & centroid detector
     return this._detectFaceHeuristic(imgData);
   }
 
   _estimateHeadPoseFromLandmarks(face) {
-    // If landmarks (eyes, nose, mouth) are available from FaceDetector:
     if (face.landmarks && face.landmarks.length >= 2) {
       const eyePoints = face.landmarks.filter(l => l.type === 'eye');
       const mouthPoints = face.landmarks.filter(l => l.type === 'mouth');
-      const nosePoints = face.landmarks.filter(l => l.type === 'nose');
 
       if (eyePoints.length === 2) {
         const [leftEye, rightEye] = eyePoints;
         const eyeCenter = (leftEye.location.x + rightEye.location.x) / 2;
         const boxCenter = face.boundingBox.x + face.boundingBox.width / 2;
         const normalizedYaw = (eyeCenter - boxCenter) / (face.boundingBox.width / 2);
-        const yaw = normalizedYaw * 45; // Approx degrees
+        const yaw = normalizedYaw * 42;
 
         let pitch = 0;
         if (mouthPoints.length > 0) {
@@ -196,7 +272,6 @@ export class CameraProctor {
       }
     }
 
-    // Centroid offset inside bounding box
     const box = face.boundingBox;
     const canvasCenterX = this.offscreenCanvas.width / 2;
     const canvasCenterY = this.offscreenCanvas.height / 2;
@@ -217,13 +292,11 @@ export class CameraProctor {
     let sumX = 0;
     let sumY = 0;
 
-    // Scan every 4th pixel for performance
     for (let i = 0; i < data.length; i += 16) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
 
-      // Standard skin-tone range in RGB
       if (r > 70 && g > 40 && b > 20 && r > g && r > b && Math.abs(r - g) > 15) {
         skinPixels++;
         const pixelIdx = i / 4;
@@ -253,7 +326,6 @@ export class CameraProctor {
     let samples = 0;
 
     for (let i = 0; i < data.length; i += 4 * sampleStep) {
-      // Perceived luminosity
       const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
       sumLuma += luma;
       samples++;
@@ -278,11 +350,8 @@ export class CameraProctor {
 
     let quality = PROCTORING_CONFIG.SNAPSHOT_QUALITY;
     let dataUrl = this.offscreenCanvas.toDataURL('image/jpeg', quality);
-
-    // Approximate byte size from base64 length: (len * 3/4)
     let byteSize = Math.round((dataUrl.length - 22) * 0.75);
 
-    // If exceeding 20KB, compress further
     if (byteSize > PROCTORING_CONFIG.SNAPSHOT_MAX_SIZE_KB * 1024) {
       quality = 0.25;
       dataUrl = this.offscreenCanvas.toDataURL('image/jpeg', quality);
@@ -306,7 +375,12 @@ export class CameraProctor {
       this.intervalId = null;
     }
     if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
+      const tracks = this.stream.getTracks();
+      tracks.forEach(track => {
+        track.removeEventListener('ended', this._handleTrackEnded);
+        track.removeEventListener('mute', this._handleTrackMute);
+        track.stop();
+      });
       this.stream = null;
     }
     if (this.videoElement) {

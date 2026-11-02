@@ -16,18 +16,18 @@ export const PROCTORING_CONFIG = {
 
   // Initial grace period (in ms) when the exam starts.
   // No violations are recorded during this window while the student settles in.
-  GRACE_PERIOD_MS: 8000,
+  GRACE_PERIOD_MS: 10000,
 
   // Sustained duration required before a violation is flagged (in ms).
   // Momentary blinks, head twitches, or glances (< threshold) are ignored.
-  SUSTAINED_NO_FACE_MS: 3000,
-  SUSTAINED_MULTIPLE_FACES_MS: 2000,
-  SUSTAINED_LOOKING_AWAY_MS: 3500,
-  SUSTAINED_COVERED_LENS_MS: 3000,
+  SUSTAINED_NO_FACE_MS: 4000,
+  SUSTAINED_MULTIPLE_FACES_MS: 3000,
+  SUSTAINED_LOOKING_AWAY_MS: 4000,
+  SUSTAINED_COVERED_LENS_MS: 4000,
 
   // Cooldown period (in ms) after a violation is recorded.
   // Prevents multiple rapid-fire violations for the same continuous incident.
-  COOLDOWN_MS: 5000,
+  COOLDOWN_MS: 15000,
 
   // Hysteresis margin to prevent oscillation at boundary values (0.0 - 1.0)
   HYSTERESIS_MARGIN: 0.1,

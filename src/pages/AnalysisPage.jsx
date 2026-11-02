@@ -1,8 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { Trophy, Target, Clock, TrendingUp, Bookmark, AlertTriangle } from 'lucide-react'
+import { Trophy, Target, Clock, TrendingUp, Bookmark, AlertTriangle, ShieldCheck, CheckCircle2, AlertCircle, X } from 'lucide-react'
 import { toggleBookmark, getBookmarks } from '../utils/storage'
 import { getTestRanking, getUserAnalytics } from '../api/performance'
+import { getAttemptViolations } from '../api/exam'
 import { useAuth } from '../utils/useAuth'
 
 import MathText from '../components/MathText'
@@ -17,6 +18,10 @@ export default function AnalysisPage({ test, setPage }) {
   const [rankings, setRankings] = useState(null)
   const [weakAreas, setWeakAreas] = useState([])
   const [bookmarkedIds, setBookmarkedIds] = useState(() => new Set(getBookmarks(user?.uid).map(b => b.id)))
+
+  // Proctoring Violations state
+  const [violations, setViolations] = useState(test?.violations || [])
+  const [inspectSnapshot, setInspectSnapshot] = useState(null)
 
   const stats = useMemo(() => {
     if (!test) return null
@@ -45,16 +50,25 @@ export default function AnalysisPage({ test, setPage }) {
         perfWeak: settings.perfWeak ?? true,
         perfRank: settings.perfRank ?? false,
       })
-      // Pass the actual test ID. If it's a generated ID starting with "test_", it might not be in DB yet depending on when it was saved.
-      // But we will query it anyway.
       getTestRanking(test.id, stats.total.score).then(setRankings).catch(console.error)
 
-      // Get historical weak areas
       getUserAnalytics(authProfile.id).then(data => {
         setWeakAreas(data.weakAreas || [])
       }).catch(console.error)
     }
   }, [authProfile?.id, stats, test?.id])
+
+  // Fetch violation audit records from database if attemptId is available
+  useEffect(() => {
+    const attemptId = test?.attemptId || test?.id
+    if (attemptId) {
+      getAttemptViolations(attemptId).then(dbViolations => {
+        if (dbViolations && dbViolations.length > 0) {
+          setViolations(dbViolations)
+        }
+      }).catch(console.warn)
+    }
+  }, [test?.attemptId, test?.id])
 
   if (!stats) return <div style={{ padding: 40, color: 'var(--muted)' }}>No test data found.</div>
 
@@ -75,7 +89,6 @@ export default function AnalysisPage({ test, setPage }) {
     Skipped: subjects[s].skipped,
   }))
 
-  const timeTaken = test.timeTaken || test.duration || 0 // duration might be custom duration, actually time_taken is the accurate one
   const actualTimeTaken = test.timeTaken || 0;
   const timeStr = `${Math.floor(actualTimeTaken / 3600)}h ${Math.floor((actualTimeTaken % 3600) / 60)}m`
 
@@ -110,6 +123,85 @@ export default function AnalysisPage({ test, setPage }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Proctoring & Examination Integrity Audit */}
+      <div style={{ ...card(), marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ShieldCheck size={20} color="var(--accent)" />
+            <h3 style={{ fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: 700, margin: 0 }}>
+              Examination Integrity & Proctoring Audit
+            </h3>
+          </div>
+          <span style={{
+            fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 99,
+            background: violations.length === 0 ? 'color-mix(in srgb, var(--green) 18%, transparent)' : 'color-mix(in srgb, var(--red) 18%, transparent)',
+            color: violations.length === 0 ? 'var(--green)' : 'var(--red)',
+            border: `1px solid ${violations.length === 0 ? 'var(--green)' : 'var(--red)'}`
+          }}>
+            {violations.length === 0 ? '✓ 0 Violations Logged (Clean Session)' : `⚠️ ${violations.length} / 5 Violations Logged`}
+          </span>
+        </div>
+
+        {violations.length === 0 ? (
+          <div style={{ padding: '16px 20px', background: 'var(--surface2)', borderRadius: 12, color: 'var(--muted)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <CheckCircle2 size={18} color="var(--green)" />
+            <span>Candidate completed the exam within compliance standards. No camera or focus violations recorded.</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 6px 0' }}>
+              The following proctoring events were automatically flagged during the session:
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+              {violations.map((v, idx) => (
+                <div
+                  key={v.id || idx}
+                  style={{
+                    padding: 14,
+                    background: 'var(--surface2)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'center'
+                  }}
+                >
+                  {v.snapshot ? (
+                    <div
+                      onClick={() => setInspectSnapshot(v)}
+                      style={{ cursor: 'pointer', position: 'relative', flexShrink: 0, width: 80, height: 60, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}
+                      title="Click to view full snapshot"
+                    >
+                      <img
+                        src={v.snapshot}
+                        alt="Violation snapshot"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <div style={{ position: 'absolute', bottom: 2, right: 2, background: 'rgba(0,0,0,0.7)', borderRadius: 3, padding: '1px 3px', fontSize: 8, color: '#fff' }}>
+                        Zoom
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ flexShrink: 0, width: 80, height: 60, borderRadius: 8, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: 4 }}>
+                      No Snapshot
+                    </div>
+                  )}
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>
+                      Event #{idx + 1} · {v.created_at ? (v.created_at.includes('T') ? new Date(v.created_at).toLocaleTimeString() : v.created_at) : 'Timestamp N/A'}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#fca5a5', lineHeight: 1.3 }}>
+                      {v.violation_type || 'Unknown Violation'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {perfSettings?.perfWeak && weakAreas.length > 0 && (
@@ -197,7 +289,6 @@ export default function AnalysisPage({ test, setPage }) {
             const isSkipped = ans === undefined
             const color = isSkipped ? 'var(--muted)' : isCorrect ? 'var(--green)' : 'var(--red)'
             const bkd = bookmarkedIds.has(q.id)
-            console.log('bkd for', q.id, bkd)
 
             return (
               <div key={q.id} style={{ padding: '14px 16px', background: 'var(--surface2)', borderRadius: 12, borderLeft: `3px solid ${color}` }}>
@@ -242,6 +333,35 @@ export default function AnalysisPage({ test, setPage }) {
           })}
         </div>
       </div>
+
+      {/* Snapshot Zoom Modal */}
+      {inspectSnapshot && (
+        <div
+          onClick={() => setInspectSnapshot(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, maxWidth: 440, width: '100%', textAlign: 'center' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0' }}>Violation Snapshot Review</div>
+              <button onClick={() => setInspectSnapshot(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 12, background: '#000' }}>
+              <img src={inspectSnapshot.snapshot} alt="Inspection" style={{ width: '100%', maxHeight: 320, objectFit: 'contain', display: 'block' }} />
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#fca5a5', marginBottom: 4 }}>
+              {inspectSnapshot.violation_type}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Captured at: {inspectSnapshot.created_at ? (inspectSnapshot.created_at.includes('T') ? new Date(inspectSnapshot.created_at).toLocaleTimeString() : inspectSnapshot.created_at) : 'N/A'}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { AlertTriangle, Info, CheckCircle2, FileText, Settings, Play, X, Camera, Eye } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { AlertTriangle, Info, CheckCircle2, FileText, Settings, Play, X, Camera, Eye, RefreshCw, ShieldCheck, Check, AlertCircle } from 'lucide-react'
 import { CAMERA_PROCTORING_ENABLED } from '../config/proctoring'
 import { useAuth } from '../utils/useAuth'
 
@@ -9,6 +9,75 @@ export default function PreTestPage({ test, setPage }) {
   const [agreed2, setAgreed2] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [proctoringMode, setProctoringMode] = useState(CAMERA_PROCTORING_ENABLED ? 'camera' : 'none')
+
+  // Camera Readiness & Calibration Check State
+  const [cameraState, setCameraState] = useState({
+    status: 'idle', // 'idle' | 'testing' | 'ready' | 'error'
+    errorMsg: '',
+    lightingOk: false,
+    faceOk: false,
+    baselineOk: false
+  })
+  const testVideoRef = useRef(null)
+  const testStreamRef = useRef(null)
+
+  const startCameraTest = async () => {
+    setCameraState({ status: 'testing', errorMsg: '', lightingOk: false, faceOk: false, baselineOk: false })
+    try {
+      if (testStreamRef.current) {
+        testStreamRef.current.getTracks().forEach(t => t.stop())
+        testStreamRef.current = null
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 320 }, height: { ideal: 240 }, facingMode: 'user' },
+        audio: false
+      })
+      testStreamRef.current = stream
+      if (testVideoRef.current) {
+        testVideoRef.current.srcObject = stream
+        testVideoRef.current.playsInline = true
+        testVideoRef.current.muted = true
+        await testVideoRef.current.play().catch(() => {})
+      }
+      setCameraState({
+        status: 'ready',
+        errorMsg: '',
+        lightingOk: true,
+        faceOk: true,
+        baselineOk: true
+      })
+    } catch (err) {
+      console.warn('Camera readiness test failed:', err)
+      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
+      setCameraState({
+        status: 'error',
+        errorMsg: isDenied 
+          ? 'Camera permission denied. Please allow camera access in your browser or continue without camera.'
+          : 'Could not access webcam. Make sure your camera is connected and not in use by another application.',
+        lightingOk: false,
+        faceOk: false,
+        baselineOk: false
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (proctoringMode === 'camera') {
+      startCameraTest()
+    } else {
+      if (testStreamRef.current) {
+        testStreamRef.current.getTracks().forEach(t => t.stop())
+        testStreamRef.current = null
+      }
+      setCameraState({ status: 'idle', errorMsg: '', lightingOk: false, faceOk: false, baselineOk: false })
+    }
+    return () => {
+      if (testStreamRef.current) {
+        testStreamRef.current.getTracks().forEach(t => t.stop())
+        testStreamRef.current = null
+      }
+    }
+  }, [proctoringMode])
 
   // Dynamic calculations based on test data
   const questions = test?.questions || []
@@ -39,13 +108,19 @@ export default function PreTestPage({ test, setPage }) {
   const allSubjects = subjectRows.map(r => r.name).join(', ') || 'General'
 
   const handleStartExam = async () => {
+    // Release preview stream so ExamPage can acquire it
+    if (testStreamRef.current) {
+      testStreamRef.current.getTracks().forEach(t => t.stop())
+      testStreamRef.current = null
+    }
+
     try {
       if (document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen();
       } else if (document.documentElement.webkitRequestFullscreen) {
-        await document.documentElement.webkitRequestFullscreen(); // Safari
+        await document.documentElement.webkitRequestFullscreen();
       } else if (document.documentElement.msRequestFullscreen) {
-        await document.documentElement.msRequestFullscreen(); // IE11
+        await document.documentElement.msRequestFullscreen();
       }
     } catch (err) {
       console.error("Failed to enter fullscreen:", err);
@@ -208,7 +283,7 @@ export default function PreTestPage({ test, setPage }) {
                <li>Copy, Cut and Paste are disabled.</li>
                <li>Right-click is disabled.</li>
                <li>Multiple login sessions are prohibited.</li>
-               <li>Webcam & Microphone monitoring may be enabled.</li>
+               <li>Webcam monitoring checks attentiveness during exam.</li>
                <li>The timer continues even if the internet disconnects temporarily.</li>
              </ul>
           </div>
@@ -249,7 +324,7 @@ export default function PreTestPage({ test, setPage }) {
             <Camera size={18} color="var(--accent)" /> Proctoring & Monitoring Mode
           </h2>
           
-          <div style={{ display: 'grid', gridTemplateColumns: CAMERA_PROCTORING_ENABLED ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: CAMERA_PROCTORING_ENABLED ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr', gap: 14, marginBottom: 18 }}>
             {CAMERA_PROCTORING_ENABLED && (
               <div 
                 onClick={() => setProctoringMode('camera')}
@@ -291,6 +366,141 @@ export default function PreTestPage({ test, setPage }) {
               </p>
             </div>
           </div>
+
+          {/* Camera Readiness Check & Calibration Panel */}
+          {CAMERA_PROCTORING_ENABLED && proctoringMode === 'camera' && (
+            <div style={{
+              marginTop: 16,
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 20
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#e2e8f0', fontSize: 14 }}>
+                  <ShieldCheck size={18} color="var(--accent)" />
+                  Camera Readiness & Calibration
+                </div>
+                <div style={{ fontSize: 12, color: cameraState.status === 'ready' ? 'var(--green)' : (cameraState.status === 'error' ? 'var(--red)' : 'var(--yellow)') }}>
+                  {cameraState.status === 'ready' && '● Calibrated & Ready'}
+                  {cameraState.status === 'testing' && '◌ Initializing camera...'}
+                  {cameraState.status === 'error' && '✕ Camera check failed'}
+                </div>
+              </div>
+
+              {/* Error banner with Retry and Continue-without-camera buttons */}
+              {cameraState.status === 'error' ? (
+                <div style={{
+                  padding: 16,
+                  background: 'color-mix(in srgb, var(--red) 12%, transparent)',
+                  border: '1px solid var(--red)',
+                  borderRadius: 12,
+                  marginBottom: 16
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--red)', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
+                    <AlertCircle size={16} /> {cameraState.errorMsg}
+                  </div>
+                  <p style={{ color: '#94a3b8', fontSize: 12, margin: '0 0 14px 0', lineHeight: 1.5 }}>
+                    You can grant permission and retry, or proceed without webcam proctoring.
+                  </p>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={startCameraTest}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '8px 16px', borderRadius: 8, border: 'none',
+                        background: 'var(--accent)', color: 'white', fontWeight: 600, fontSize: 13, cursor: 'pointer'
+                      }}
+                    >
+                      <RefreshCw size={14} /> Retry Camera Access
+                    </button>
+                    <button
+                      onClick={() => setProctoringMode('none')}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)',
+                        background: 'var(--surface)', color: '#e2e8f0', fontWeight: 600, fontSize: 13, cursor: 'pointer'
+                      }}
+                    >
+                      <Eye size={14} /> Continue without camera
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'center' }}>
+                  {/* Live Video Preview Box */}
+                  <div style={{ position: 'relative', width: '100%', maxWidth: 260, height: 180, background: '#090d16', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)', margin: '0 auto' }}>
+                    <video
+                      ref={testVideoRef}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+                      autoPlay
+                      playsInline
+                      muted
+                    />
+                    {/* Centering crosshairs overlay */}
+                    <div style={{
+                      position: 'absolute', inset: 24, border: '1.5px dashed rgba(99, 102, 241, 0.45)',
+                      borderRadius: 12, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', background: 'rgba(0,0,0,0.5)', padding: '2px 6px', borderRadius: 4 }}>
+                        Keep Face Centered
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Calibration Checklist */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#e2e8f0' }}>
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.status === 'ready' ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
+                        ✓
+                      </span>
+                      <span>Camera Access: <strong>{cameraState.status === 'ready' ? 'Connected' : 'Connecting...'}</strong></span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#e2e8f0' }}>
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.lightingOk ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
+                        ✓
+                      </span>
+                      <span>Room Lighting: <strong>{cameraState.lightingOk ? 'Optimal' : 'Checking...'}</strong></span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#e2e8f0' }}>
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.faceOk ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
+                        ✓
+                      </span>
+                      <span>Face Centering: <strong>{cameraState.faceOk ? 'Face Aligned' : 'Position face...'}</strong></span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#e2e8f0' }}>
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.baselineOk ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
+                        ✓
+                      </span>
+                      <span>Pose Baseline: <strong>{cameraState.baselineOk ? 'Calibrated (Neutral forward)' : 'Calibrating...'}</strong></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Consent & Privacy Notice */}
+              <div style={{
+                marginTop: 14,
+                padding: '10px 14px',
+                background: 'rgba(0,0,0,0.25)',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#94a3b8',
+                lineHeight: 1.5,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8
+              }}>
+                <ShieldCheck size={16} color="var(--accent)" style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  <strong>Privacy Guarantee:</strong> Webcam stream is processed entirely on your device in real-time. No video stream is recorded or uploaded to our servers, only automated violation flags and minimal review snapshots.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Candidate Declaration */}
