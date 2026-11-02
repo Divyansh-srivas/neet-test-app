@@ -135,3 +135,4 @@ export function extractHeadPose(faceResult, faceIndex = 0) {
 
   return { yaw: 0, pitch: 0, roll: 0 };
 }
+

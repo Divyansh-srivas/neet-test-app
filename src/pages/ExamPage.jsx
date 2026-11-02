@@ -72,6 +72,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
   const proctorRef = useRef(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraWarningText, setCameraWarningText] = useState(null)
+  const [proctorNotice, setProctorNotice] = useState(null)
 
   // Group questions by subject
   let subjectGroups = []
@@ -240,9 +241,19 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
     }
 
     let active = true;
+    const baselinePose = test?.baselinePose || (() => {
+      try {
+        const raw = localStorage.getItem('neogravix_proctoring_baseline');
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
+      }
+    })();
+
     const proctor = new CameraProctor({
       videoElement: videoRef.current,
       initialViolationCount: violationCount,
+      baselinePose,
       onStateChange: (state) => {
         if (!active) return;
         if (state.status === 'warning') {
@@ -279,10 +290,11 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
           setShowViolationWarning(true);
         }
       },
-      onFallbackToWithoutCamera: ({ reason }) => {
+      onFallbackToWithoutCamera: ({ reason, message }) => {
         if (!active) return;
-        console.warn('[ExamPage] Camera/model unavailable. Falling back to without-camera:', reason);
+        console.warn('[ExamPage] Camera unavailable/model failed. Falling back to Without Camera mode:', reason);
         setCameraActive(false);
+        setProctorNotice(message || 'Camera proctoring model could not be loaded. Your test is continuing in Standard (Without Camera) mode without penalty.');
       }
     });
 
@@ -577,6 +589,26 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
 
       {/* Main Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', paddingBottom: 60, pointerEvents: showViolationWarning ? 'none' : 'auto', filter: showViolationWarning ? 'blur(4px)' : 'none' }}>
+        {/* Proctor Fallback Notice Banner */}
+        {proctorNotice && (
+          <div style={{
+            background: 'color-mix(in srgb, var(--yellow) 15%, var(--surface))',
+            borderBottom: '1px solid var(--yellow)',
+            padding: '10px 20px',
+            fontSize: 12,
+            color: '#fef08a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            position: 'sticky',
+            top: 0,
+            zIndex: 60
+          }}>
+            <span>ℹ️ {proctorNotice}</span>
+            <button onClick={() => setProctorNotice(null)} style={{ background: 'transparent', border: 'none', color: '#fef08a', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>✕</button>
+          </div>
+        )}
+
         {/* Top Bar */}
         <div style={{
           background: 'var(--bg)', borderBottom: '1px solid var(--border)',

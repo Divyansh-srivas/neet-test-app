@@ -30,6 +30,15 @@ export class ProctoringStateMachine {
     this.activeCondition = null;
     this.hasTriggeredForCurrentIncident = false;
     this.isLookingAwayWithHysteresis = false;
+    this.baselinePose = { yaw: 0, pitch: 0, roll: 0 };
+  }
+
+  setBaselinePose(pose) {
+    this.baselinePose = {
+      yaw: Number(pose?.yaw) || 0,
+      pitch: Number(pose?.pitch) || 0,
+      roll: Number(pose?.roll) || 0
+    };
   }
 
   setViolationCount(count) {
@@ -220,12 +229,15 @@ export class ProctoringStateMachine {
   }
 
   _checkLookingAway(headPose) {
-    const yaw = Math.abs(headPose.yaw || 0);
-    const pitch = headPose.pitch || 0;
+    const baseYaw = this.baselinePose?.yaw || 0;
+    const basePitch = this.baselinePose?.pitch || 0;
 
-    const yawLimit = this.config.YAW_THRESHOLD_DEG;
-    const pitchUpLimit = this.config.PITCH_UP_THRESHOLD_DEG;
-    const pitchDownLimit = this.config.PITCH_DOWN_THRESHOLD_DEG;
+    const relativeYaw = Math.abs((headPose.yaw || 0) - baseYaw);
+    const relativePitch = (headPose.pitch || 0) - basePitch;
+
+    const yawLimit = this.config.YAW_THRESHOLD_DEG; // 35 deg
+    const pitchUpLimit = this.config.PITCH_UP_THRESHOLD_DEG; // 25 deg
+    const pitchDownLimit = this.config.PITCH_DOWN_THRESHOLD_DEG; // 28 deg
     const margin = this.config.HYSTERESIS_MARGIN;
 
     if (this.isLookingAwayWithHysteresis) {
@@ -235,14 +247,14 @@ export class ProctoringStateMachine {
       const pitchDownExit = pitchDownLimit * (1 - margin);
 
       const stillLookingAway =
-        yaw >= yawExit || pitch >= pitchUpExit || pitch <= -pitchDownExit;
+        relativeYaw >= yawExit || relativePitch >= pitchUpExit || relativePitch <= -pitchDownExit;
 
       this.isLookingAwayWithHysteresis = stillLookingAway;
       return stillLookingAway;
     } else {
       // Enter looking away state when crossing threshold
       const enteredLookingAway =
-        yaw >= yawLimit || pitch >= pitchUpLimit || pitch <= -pitchDownLimit;
+        relativeYaw >= yawLimit || relativePitch >= pitchUpLimit || relativePitch <= -pitchDownLimit;
 
       this.isLookingAwayWithHysteresis = enteredLookingAway;
       return enteredLookingAway;

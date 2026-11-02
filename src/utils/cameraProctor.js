@@ -15,7 +15,8 @@ export class CameraProctor {
     onViolation = () => {},
     onStateChange = () => {},
     onFallbackToWithoutCamera = () => {},
-    initialViolationCount = 0
+    initialViolationCount = 0,
+    baselinePose = { yaw: 0, pitch: 0 }
   } = {}) {
     this.videoElement = videoElement;
     this.onViolation = onViolation;
@@ -24,6 +25,9 @@ export class CameraProctor {
 
     this.stateMachine = new ProctoringStateMachine(PROCTORING_CONFIG);
     this.stateMachine.setViolationCount(initialViolationCount);
+    if (baselinePose) {
+      this.stateMachine.setBaselinePose(baselinePose);
+    }
 
     this.stream = null;
     this.intervalId = null;
@@ -96,7 +100,7 @@ export class CameraProctor {
     this.offscreenCanvas.height = PROCTORING_CONFIG.SNAPSHOT_HEIGHT;
     this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
 
-    // 3. Initialize Face Landmarker (MediaPipe WASM + .task model with resilient fallback)
+    // 3. Initialize Face Landmarker (MediaPipe WASM + .task model)
     try {
       this.landmarker = await getFaceLandmarker({
         wasmPath: '/models/wasm',
@@ -106,14 +110,14 @@ export class CameraProctor {
       });
       console.log('[CameraProctor] MediaPipe FaceLandmarker loaded successfully.');
     } catch (modelErr) {
-      console.warn('[CameraProctor] MediaPipe unavailable, falling back to browser Shape Detection or heuristic:', modelErr);
-      try {
-        if (typeof window !== 'undefined' && 'FaceDetector' in window) {
-          this.faceDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
-        }
-      } catch (nativeErr) {
-        console.warn('[CameraProctor] Native FaceDetector unavailable:', nativeErr);
-      }
+      console.warn('[CameraProctor] MediaPipe model failed to load. Falling back to WITHOUT CAMERA mode for this attempt:', modelErr);
+      this.stop();
+      this.onFallbackToWithoutCamera({
+        reason: 'model_load_failure',
+        message: 'Camera proctoring model could not be loaded. Exam is continuing in Without Camera mode without penalty.',
+        error: modelErr
+      });
+      return;
     }
 
     this.isRunning = true;
@@ -208,10 +212,9 @@ export class CameraProctor {
   }
 
   /**
-   * Detects faces and estimates head pose using MediaPipe, native detector, or heuristic fallback.
+   * Detects faces and estimates head pose using MediaPipe FaceLandmarker.
    */
   async _detectFaces(imgData, timestamp) {
-    // 1. MediaPipe FaceLandmarker
     if (this.landmarker && this.videoElement) {
       try {
         const mpResult = this.landmarker.detectForVideo(this.videoElement, timestamp);
@@ -228,94 +231,7 @@ export class CameraProctor {
       }
     }
 
-    // 2. Native Shape Detection API fallback
-    if (this.faceDetector) {
-      try {
-        const detectedFaces = await this.faceDetector.detect(this.offscreenCanvas);
-        if (detectedFaces && detectedFaces.length > 0) {
-          const primary = detectedFaces[0];
-          const headPose = this._estimateHeadPoseFromLandmarks(primary);
-          return { faceCount: detectedFaces.length, headPose };
-        }
-        return { faceCount: 0, headPose: { yaw: 0, pitch: 0 } };
-      } catch (err) {
-        // Fall back to heuristic if detector threw error
-      }
-    }
-
-    // 3. Heuristic face presence & centroid detector
-    return this._detectFaceHeuristic(imgData);
-  }
-
-  _estimateHeadPoseFromLandmarks(face) {
-    if (face.landmarks && face.landmarks.length >= 2) {
-      const eyePoints = face.landmarks.filter(l => l.type === 'eye');
-      const mouthPoints = face.landmarks.filter(l => l.type === 'mouth');
-
-      if (eyePoints.length === 2) {
-        const [leftEye, rightEye] = eyePoints;
-        const eyeCenter = (leftEye.location.x + rightEye.location.x) / 2;
-        const boxCenter = face.boundingBox.x + face.boundingBox.width / 2;
-        const normalizedYaw = (eyeCenter - boxCenter) / (face.boundingBox.width / 2);
-        const yaw = normalizedYaw * 42;
-
-        let pitch = 0;
-        if (mouthPoints.length > 0) {
-          const eyeY = (leftEye.location.y + rightEye.location.y) / 2;
-          const mouthY = mouthPoints[0].location.y;
-          const eyeMouthDist = mouthY - eyeY;
-          const expectedRatio = face.boundingBox.height * 0.45;
-          pitch = (expectedRatio - eyeMouthDist) * 0.8;
-        }
-
-        return { yaw, pitch };
-      }
-    }
-
-    const box = face.boundingBox;
-    const canvasCenterX = this.offscreenCanvas.width / 2;
-    const canvasCenterY = this.offscreenCanvas.height / 2;
-    const faceCenterX = box.x + box.width / 2;
-    const faceCenterY = box.y + box.height / 2;
-
-    const yaw = ((faceCenterX - canvasCenterX) / canvasCenterX) * 35;
-    const pitch = ((canvasCenterY - faceCenterY) / canvasCenterY) * 30;
-
-    return { yaw, pitch };
-  }
-
-  _detectFaceHeuristic(imgData) {
-    const data = imgData.data;
-    const w = imgData.width;
-    const h = imgData.height;
-    let skinPixels = 0;
-    let sumX = 0;
-    let sumY = 0;
-
-    for (let i = 0; i < data.length; i += 16) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      if (r > 70 && g > 40 && b > 20 && r > g && r > b && Math.abs(r - g) > 15) {
-        skinPixels++;
-        const pixelIdx = i / 4;
-        sumX += pixelIdx % w;
-        sumY += Math.floor(pixelIdx / w);
-      }
-    }
-
-    const minSkinThreshold = (w * h * 0.035) / 4;
-    if (skinPixels < minSkinThreshold) {
-      return { faceCount: 0, headPose: { yaw: 0, pitch: 0 } };
-    }
-
-    const avgX = sumX / skinPixels;
-    const avgY = sumY / skinPixels;
-    const yaw = ((avgX - w / 2) / (w / 2)) * 40;
-    const pitch = ((h / 2 - avgY) / (h / 2)) * 30;
-
-    return { faceCount: 1, headPose: { yaw, pitch } };
+    return { faceCount: 0, headPose: { yaw: 0, pitch: 0 } };
   }
 
   _computeImageMetrics(imgData) {

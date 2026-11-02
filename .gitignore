@@ -67,3 +67,5 @@ backend/.env.local
 backend/uploads/*.pdf
   
  
+.vercel
+.env*

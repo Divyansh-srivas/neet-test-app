@@ -32,10 +32,10 @@ export const PROCTORING_CONFIG = {
   // Hysteresis margin to prevent oscillation at boundary values (0.0 - 1.0)
   HYSTERESIS_MARGIN: 0.1,
 
-  // Head pose limits (in degrees, or normalized ratio if degrees unavailable)
-  YAW_THRESHOLD_DEG: 28,        // Horizontal head rotation (left/right)
-  PITCH_UP_THRESHOLD_DEG: 22,   // Vertical head rotation (up)
-  PITCH_DOWN_THRESHOLD_DEG: 25, // Vertical head rotation (down)
+  // Head pose limits (in degrees, strictly relative to candidate's calibration baseline)
+  YAW_THRESHOLD_DEG: 35,        // Horizontal head turn (left/right relative to baseline)
+  PITCH_UP_THRESHOLD_DEG: 25,   // Vertical head rotation (up relative to baseline)
+  PITCH_DOWN_THRESHOLD_DEG: 28, // Vertical head rotation (down relative to baseline)
 
   // Covered lens / occlusion detection (0-255 grayscale scale)
   MIN_FRAME_BRIGHTNESS: 15,     // Lens covered / dark frame threshold

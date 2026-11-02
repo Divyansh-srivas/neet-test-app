@@ -12,9 +12,9 @@ describe('ProctoringStateMachine', () => {
     SUSTAINED_LOOKING_AWAY_MS: 4000,   // 4s sustained looking away
     SUSTAINED_COVERED_LENS_MS: 4000,   // 4s sustained covered lens
     COOLDOWN_MS: 15000,             // 15s cooldown
-    YAW_THRESHOLD_DEG: 28,
-    PITCH_UP_THRESHOLD_DEG: 22,
-    PITCH_DOWN_THRESHOLD_DEG: 25,
+    YAW_THRESHOLD_DEG: 35,          // 35 deg relative to calibration baseline
+    PITCH_UP_THRESHOLD_DEG: 25,     // 25 deg
+    PITCH_DOWN_THRESHOLD_DEG: 28,   // 28 deg
     HYSTERESIS_MARGIN: 0.1,
     MIN_FRAME_BRIGHTNESS: 15,
     MIN_FRAME_VARIANCE: 4.5
@@ -123,6 +123,39 @@ describe('ProctoringStateMachine', () => {
     assert.equal(r2.violationCount, 2);
   });
 
+  it('yaw relative to calibration baseline: off-center (10-15 deg) NEVER fires, clearly turned (>40 deg) fires after sustained time', () => {
+    const sm = new ProctoringStateMachine(config);
+    sm.reset(0);
+    // Calibration baseline captured: candidate sits with slight natural offset (yaw: +2 deg, pitch: +1 deg)
+    sm.setBaselinePose({ yaw: 2, pitch: 1 });
+
+    // 1. Candidate sits slightly off-center for 30 continuous seconds (yaw = 14 deg -> relative yaw = 12 deg < 35 deg limit)
+    for (let t = 10000; t <= 40000; t += 1000) {
+      const r = sm.processFrame({ timestamp: t, faceCount: 1, headPose: { yaw: 14, pitch: 1 } });
+      assert.equal(r.status, 'normal', `Slightly off-center pose (12 deg relative) must NOT trigger warning at t=${t}`);
+      assert.equal(r.violationCount, 0);
+    }
+    assert.equal(sm.getViolationCount(), 0, 'Off-center sitting pose (10-15 deg) must NEVER fire a violation');
+
+    // 2. Candidate clearly turns head to side (>40 deg relative: yaw = 47 deg -> relative yaw = 45 deg >= 35 deg)
+    // Starts looking away at t=45000ms
+    sm.processFrame({ timestamp: 45000, faceCount: 1, headPose: { yaw: 47, pitch: 1 } });
+    sm.processFrame({ timestamp: 47000, faceCount: 1, headPose: { yaw: 47, pitch: 1 } }); // 2.0s
+    sm.processFrame({ timestamp: 48500, faceCount: 1, headPose: { yaw: 47, pitch: 1 } }); // 3.5s
+
+    // At t=49000ms (exactly 4000ms sustained >= 4000ms threshold)
+    const rTurned = sm.processFrame({ timestamp: 49000, faceCount: 1, headPose: { yaw: 47, pitch: 1 } });
+    assert.equal(rTurned.status, 'violation');
+    assert.equal(rTurned.violationType, VIOLATION_TYPES.LOOKING_AWAY);
+    assert.equal(rTurned.violationCount, 1);
+
+    // Continuous event: stays turned head past 49000ms, does not fire a second violation
+    for (let t = 49500; t <= 65000; t += 1000) {
+      const rStillTurned = sm.processFrame({ timestamp: t, faceCount: 1, headPose: { yaw: 47, pitch: 1 } });
+      assert.equal(rStillTurned.violationCount, 1, 'Continuous turned head event must remain exactly 1 violation');
+    }
+  });
+
   it('ignores momentary blinks or short glances (< 4s sustained threshold)', () => {
     const sm = new ProctoringStateMachine(config);
     sm.reset(0);
@@ -130,13 +163,13 @@ describe('ProctoringStateMachine', () => {
     // After grace period at t=10000ms
     sm.processFrame({ timestamp: 10000, faceCount: 1, headPose: { yaw: 0, pitch: 0 } });
 
-    // Glances away (yaw = 40 deg) at t=10500ms
-    let r1 = sm.processFrame({ timestamp: 10500, faceCount: 1, headPose: { yaw: 40, pitch: 0 } });
+    // Glances away (yaw = 45 deg) at t=10500ms
+    let r1 = sm.processFrame({ timestamp: 10500, faceCount: 1, headPose: { yaw: 45, pitch: 0 } });
     assert.equal(r1.status, 'warning');
     assert.equal(r1.activeWarning, VIOLATION_TYPES.LOOKING_AWAY);
 
     // At t=13000ms (glance lasted 2.5s < 4.0s limit)
-    let r2 = sm.processFrame({ timestamp: 13000, faceCount: 1, headPose: { yaw: 40, pitch: 0 } });
+    let r2 = sm.processFrame({ timestamp: 13000, faceCount: 1, headPose: { yaw: 45, pitch: 0 } });
     assert.equal(r2.status, 'warning');
     assert.equal(r2.violationType, null);
 
@@ -147,27 +180,6 @@ describe('ProctoringStateMachine', () => {
 
     // Still 0 violations
     assert.equal(sm.getViolationCount(), 0);
-  });
-
-  it('triggers LOOKING_AWAY violation when gaze deflection is sustained >= 4000ms', () => {
-    const sm = new ProctoringStateMachine(config);
-    sm.reset(0);
-
-    sm.processFrame({ timestamp: 10000, faceCount: 1 });
-
-    // Starts looking away at t=10500ms
-    sm.processFrame({ timestamp: 10500, faceCount: 1, headPose: { yaw: 35 } });
-    // Still looking away at t=12500ms (2.0s)
-    sm.processFrame({ timestamp: 12500, faceCount: 1, headPose: { yaw: 35 } });
-    // Still looking away at t=14000ms (3.5s)
-    sm.processFrame({ timestamp: 14000, faceCount: 1, headPose: { yaw: 35 } });
-    // At t=14500ms (4.0s sustained looking away!)
-    const r = sm.processFrame({ timestamp: 14500, faceCount: 1, headPose: { yaw: 35 } });
-
-    assert.equal(r.status, 'violation');
-    assert.equal(r.violationType, VIOLATION_TYPES.LOOKING_AWAY);
-    assert.equal(r.violationCount, 1);
-    assert.equal(r.autoSubmit, false);
   });
 
   it('triggers MULTIPLE_FACES violation when two faces are present for >= 3000ms', () => {
@@ -204,28 +216,27 @@ describe('ProctoringStateMachine', () => {
     assert.equal(r.violationCount, 1);
   });
 
-  it('hysteresis prevents flapping near angle boundaries', () => {
+  it('hysteresis prevents flapping near angle boundaries (35 deg limit)', () => {
     const sm = new ProctoringStateMachine(config);
     sm.reset(0);
 
     sm.processFrame({ timestamp: 10000, faceCount: 1 });
 
-    // 1. Cross threshold: yaw = 29 deg (> 28 deg limit)
-    sm.processFrame({ timestamp: 10500, faceCount: 1, headPose: { yaw: 29 } });
+    // 1. Cross threshold: yaw = 36 deg (> 35 deg limit)
+    sm.processFrame({ timestamp: 10500, faceCount: 1, headPose: { yaw: 36 } });
     assert.equal(sm.isLookingAwayWithHysteresis, true);
 
-    // 2. Drop slightly to 27 deg (still within hysteresis margin 28 * (1 - 0.1) = 25.2 deg)
-    sm.processFrame({ timestamp: 10800, faceCount: 1, headPose: { yaw: 27 } });
+    // 2. Drop slightly to 33 deg (still within hysteresis margin 35 * (1 - 0.1) = 31.5 deg)
+    sm.processFrame({ timestamp: 10800, faceCount: 1, headPose: { yaw: 33 } });
     assert.equal(sm.isLookingAwayWithHysteresis, true);
 
-    // 3. Drop clearly below exit threshold to 24 deg -> exits looking away!
-    sm.processFrame({ timestamp: 11000, faceCount: 1, headPose: { yaw: 24 } });
+    // 3. Drop clearly below exit threshold to 30 deg -> exits looking away!
+    sm.processFrame({ timestamp: 11000, faceCount: 1, headPose: { yaw: 30 } });
     assert.equal(sm.isLookingAwayWithHysteresis, false);
   });
 
   it('restores violation count on page refresh and auto-submits on 5th violation', () => {
     const sm = new ProctoringStateMachine(config);
-    // Student already had 4 violations stored in DB / localStorage
     sm.reset(0, 4);
     assert.equal(sm.getViolationCount(), 4);
 

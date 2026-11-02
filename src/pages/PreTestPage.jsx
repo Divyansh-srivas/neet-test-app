@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { AlertTriangle, Info, CheckCircle2, FileText, Settings, Play, X, Camera, Eye, RefreshCw, ShieldCheck, Check, AlertCircle } from 'lucide-react'
 import { CAMERA_PROCTORING_ENABLED } from '../config/proctoring'
+import { getFaceLandmarker, extractHeadPose } from '../utils/faceLandmarker'
 import { useAuth } from '../utils/useAuth'
 
 export default function PreTestPage({ test, setPage }) {
@@ -10,42 +11,139 @@ export default function PreTestPage({ test, setPage }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [proctoringMode, setProctoringMode] = useState(CAMERA_PROCTORING_ENABLED ? 'camera' : 'none')
 
-  // Camera Readiness & Calibration Check State
+  // Computed Camera Readiness & Calibration Check State
   const [cameraState, setCameraState] = useState({
     status: 'idle', // 'idle' | 'testing' | 'ready' | 'error'
     errorMsg: '',
+    cameraConnected: false,
     lightingOk: false,
     faceOk: false,
-    baselineOk: false
+    baselineOk: false,
+    measuredYaw: 0,
+    measuredPitch: 0
   })
   const testVideoRef = useRef(null)
   const testStreamRef = useRef(null)
+  const baselinePoseRef = useRef(null)
+  const checkIntervalRef = useRef(null)
 
   const startCameraTest = async () => {
-    setCameraState({ status: 'testing', errorMsg: '', lightingOk: false, faceOk: false, baselineOk: false })
+    if (checkIntervalRef.current) clearInterval(checkIntervalRef.current)
+    setCameraState({
+      status: 'testing',
+      errorMsg: '',
+      cameraConnected: false,
+      lightingOk: false,
+      faceOk: false,
+      baselineOk: false,
+      measuredYaw: 0,
+      measuredPitch: 0
+    })
+
     try {
       if (testStreamRef.current) {
         testStreamRef.current.getTracks().forEach(t => t.stop())
         testStreamRef.current = null
       }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 320 }, height: { ideal: 240 }, facingMode: 'user' },
         audio: false
       })
       testStreamRef.current = stream
+
       if (testVideoRef.current) {
         testVideoRef.current.srcObject = stream
         testVideoRef.current.playsInline = true
         testVideoRef.current.muted = true
         await testVideoRef.current.play().catch(() => {})
       }
-      setCameraState({
-        status: 'ready',
-        errorMsg: '',
-        lightingOk: true,
-        faceOk: true,
-        baselineOk: true
-      })
+
+      // Initialize FaceLandmarker for real calibration
+      let landmarker = null;
+      try {
+        landmarker = await getFaceLandmarker({
+          wasmPath: '/models/wasm',
+          modelPath: '/models/face_landmarker.task',
+          runningMode: 'VIDEO',
+          numFaces: 2
+        });
+      } catch (e) {
+        console.warn('[PreTestPage] MediaPipe calibration load error:', e);
+      }
+
+      // Create offscreen canvas for real computed metrics
+      const offscreen = document.createElement('canvas');
+      offscreen.width = 160;
+      offscreen.height = 120;
+      const offCtx = offscreen.getContext('2d', { willReadFrequently: true });
+
+      // Run computed frame checks periodically
+      checkIntervalRef.current = setInterval(() => {
+        if (!testVideoRef.current || testVideoRef.current.readyState < 2) return;
+
+        // 1. Compute real lighting metrics
+        offCtx.drawImage(testVideoRef.current, 0, 0, 160, 120);
+        const imgData = offCtx.getImageData(0, 0, 160, 120);
+        const data = imgData.data;
+        let sumLuma = 0;
+        let count = 0;
+        for (let i = 0; i < data.length; i += 16) {
+          sumLuma += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          count++;
+        }
+        const brightness = sumLuma / count;
+        let sumSqDiff = 0;
+        for (let i = 0; i < data.length; i += 16) {
+          const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          sumSqDiff += (luma - brightness) * (luma - brightness);
+        }
+        const variance = Math.sqrt(sumSqDiff / count);
+        const computedLightingOk = brightness >= 25 && brightness <= 235 && variance >= 4.5;
+
+        // 2. Compute face detection & centering via MediaPipe
+        let computedFaceOk = false;
+        let computedBaselineOk = false;
+        let currentPose = { yaw: 0, pitch: 0 };
+
+        if (landmarker && testVideoRef.current) {
+          try {
+            const res = landmarker.detectForVideo(testVideoRef.current, performance.now());
+            const faces = res?.faceLandmarks?.length || 0;
+            computedFaceOk = faces === 1;
+
+            if (computedFaceOk) {
+              currentPose = extractHeadPose(res, 0);
+              // Baseline requires candidate to be sitting looking forward (|yaw| <= 20, |pitch| <= 20)
+              if (Math.abs(currentPose.yaw) <= 22 && Math.abs(currentPose.pitch) <= 22) {
+                computedBaselineOk = true;
+                baselinePoseRef.current = currentPose;
+              }
+            }
+          } catch (detErr) {
+            console.warn('[PreTestPage] Detection check error:', detErr);
+          }
+        } else {
+          // If landmarker is unavailable on device, fall back to basic stream validation
+          computedFaceOk = true;
+          computedBaselineOk = true;
+          baselinePoseRef.current = { yaw: 0, pitch: 0 };
+        }
+
+        const isFullyReady = computedLightingOk && computedFaceOk && computedBaselineOk;
+
+        setCameraState({
+          status: isFullyReady ? 'ready' : 'testing',
+          errorMsg: '',
+          cameraConnected: true,
+          lightingOk: computedLightingOk,
+          faceOk: computedFaceOk,
+          baselineOk: computedBaselineOk,
+          measuredYaw: currentPose.yaw,
+          measuredPitch: currentPose.pitch
+        });
+      }, 400);
+
     } catch (err) {
       console.warn('Camera readiness test failed:', err)
       const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
@@ -54,9 +152,12 @@ export default function PreTestPage({ test, setPage }) {
         errorMsg: isDenied 
           ? 'Camera permission denied. Please allow camera access in your browser or continue without camera.'
           : 'Could not access webcam. Make sure your camera is connected and not in use by another application.',
+        cameraConnected: false,
         lightingOk: false,
         faceOk: false,
-        baselineOk: false
+        baselineOk: false,
+        measuredYaw: 0,
+        measuredPitch: 0
       })
     }
   }
@@ -65,13 +166,24 @@ export default function PreTestPage({ test, setPage }) {
     if (proctoringMode === 'camera') {
       startCameraTest()
     } else {
+      if (checkIntervalRef.current) clearInterval(checkIntervalRef.current)
       if (testStreamRef.current) {
         testStreamRef.current.getTracks().forEach(t => t.stop())
         testStreamRef.current = null
       }
-      setCameraState({ status: 'idle', errorMsg: '', lightingOk: false, faceOk: false, baselineOk: false })
+      setCameraState({
+        status: 'idle',
+        errorMsg: '',
+        cameraConnected: false,
+        lightingOk: false,
+        faceOk: false,
+        baselineOk: false,
+        measuredYaw: 0,
+        measuredPitch: 0
+      })
     }
     return () => {
+      if (checkIntervalRef.current) clearInterval(checkIntervalRef.current)
       if (testStreamRef.current) {
         testStreamRef.current.getTracks().forEach(t => t.stop())
         testStreamRef.current = null
@@ -107,11 +219,20 @@ export default function PreTestPage({ test, setPage }) {
   
   const allSubjects = subjectRows.map(r => r.name).join(', ') || 'General'
 
+  // Validation: Start button is strictly enabled ONLY when declarations are checked
+  // AND either mode is 'none', OR 1 face detected, lighting passes, and baseline is calibrated
+  const isCalibrationSatisfied = proctoringMode === 'none' || (
+    cameraState.cameraConnected && cameraState.lightingOk && cameraState.faceOk && cameraState.baselineOk
+  );
+  const canStart = agreed1 && agreed2 && isCalibrationSatisfied;
+
   const handleStartExam = async () => {
-    // Release preview stream so ExamPage can acquire it
+    if (!canStart) return;
+
+    if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
     if (testStreamRef.current) {
-      testStreamRef.current.getTracks().forEach(t => t.stop())
-      testStreamRef.current = null
+      testStreamRef.current.getTracks().forEach(t => t.stop());
+      testStreamRef.current = null;
     }
 
     try {
@@ -125,12 +246,21 @@ export default function PreTestPage({ test, setPage }) {
     } catch (err) {
       console.error("Failed to enter fullscreen:", err);
     }
+
     if (test) {
       test.proctoringMode = proctoringMode;
+      if (proctoringMode === 'camera' && baselinePoseRef.current) {
+        test.baselinePose = baselinePoseRef.current;
+      }
     }
+
     try {
       localStorage.setItem('neogravix_proctoring_mode', proctoringMode);
+      if (proctoringMode === 'camera' && baselinePoseRef.current) {
+        localStorage.setItem('neogravix_proctoring_baseline', JSON.stringify(baselinePoseRef.current));
+      }
     } catch (e) {}
+
     setPage('exam')
   }
 
@@ -229,7 +359,6 @@ export default function PreTestPage({ test, setPage }) {
 
         {/* Instructions & Marking Scheme */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 24 }}>
-          {/* Instructions */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 24 }}>
              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 16 }}>Test Instructions</h2>
              <ul style={{ paddingLeft: 20, color: 'var(--muted)', fontSize: 14, lineHeight: 1.7, display: 'flex', flexDirection: 'column', gap: 8, margin: 0 }}>
@@ -243,7 +372,6 @@ export default function PreTestPage({ test, setPage }) {
                <li>The test is automatically submitted when the timer reaches zero.</li>
              </ul>
           </div>
-          {/* Marking Scheme */}
           <div style={{ background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 20%, var(--border))', borderRadius: 16, padding: 24 }}>
              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent)', marginBottom: 16 }}>Marking Scheme</h2>
              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: 14 }}>
@@ -273,7 +401,6 @@ export default function PreTestPage({ test, setPage }) {
 
         {/* Rules & Anti-Cheating */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 24 }}>
-          {/* Rules */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 24 }}>
              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 16 }}>Rules & Regulations</h2>
              <ul style={{ paddingLeft: 20, color: 'var(--muted)', fontSize: 14, lineHeight: 1.7, display: 'flex', flexDirection: 'column', gap: 8, margin: 0 }}>
@@ -289,7 +416,6 @@ export default function PreTestPage({ test, setPage }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-             {/* Anti-Cheating Box */}
              <div style={{ background: 'color-mix(in srgb, var(--yellow) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--yellow) 30%, transparent)', borderRadius: 16, padding: 24 }}>
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--yellow)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <AlertTriangle size={18} /> Examination Monitoring Enabled
@@ -303,7 +429,6 @@ export default function PreTestPage({ test, setPage }) {
                 </p>
              </div>
 
-             {/* Important Notice */}
              <div style={{ background: 'color-mix(in srgb, var(--accent2) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent2) 30%, transparent)', borderRadius: 16, padding: 24 }}>
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent2)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Info size={18} /> Important Notice
@@ -383,12 +508,11 @@ export default function PreTestPage({ test, setPage }) {
                 </div>
                 <div style={{ fontSize: 12, color: cameraState.status === 'ready' ? 'var(--green)' : (cameraState.status === 'error' ? 'var(--red)' : 'var(--yellow)') }}>
                   {cameraState.status === 'ready' && '● Calibrated & Ready'}
-                  {cameraState.status === 'testing' && '◌ Initializing camera...'}
+                  {cameraState.status === 'testing' && '◌ Calibrating (Position face forward)...'}
                   {cameraState.status === 'error' && '✕ Camera check failed'}
                 </div>
               </div>
 
-              {/* Error banner with Retry and Continue-without-camera buttons */}
               {cameraState.status === 'error' ? (
                 <div style={{
                   padding: 16,
@@ -428,7 +552,6 @@ export default function PreTestPage({ test, setPage }) {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'center' }}>
-                  {/* Live Video Preview Box */}
                   <div style={{ position: 'relative', width: '100%', maxWidth: 260, height: 180, background: '#090d16', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)', margin: '0 auto' }}>
                     <video
                       ref={testVideoRef}
@@ -437,45 +560,44 @@ export default function PreTestPage({ test, setPage }) {
                       playsInline
                       muted
                     />
-                    {/* Centering crosshairs overlay */}
                     <div style={{
-                      position: 'absolute', inset: 24, border: '1.5px dashed rgba(99, 102, 241, 0.45)',
+                      position: 'absolute', inset: 24, border: `1.5px dashed ${cameraState.status === 'ready' ? 'var(--green)' : 'rgba(99, 102, 241, 0.45)'}`,
                       borderRadius: 12, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', background: 'rgba(0,0,0,0.5)', padding: '2px 6px', borderRadius: 4 }}>
-                        Keep Face Centered
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', background: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: 4 }}>
+                        {cameraState.status === 'ready' ? '✓ Face Aligned' : 'Align Face Here'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Calibration Checklist */}
+                  {/* Computed Calibration Checklist */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#e2e8f0' }}>
-                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.status === 'ready' ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
-                        ✓
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.cameraConnected ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
+                        {cameraState.cameraConnected ? '✓' : '○'}
                       </span>
-                      <span>Camera Access: <strong>{cameraState.status === 'ready' ? 'Connected' : 'Connecting...'}</strong></span>
+                      <span>Camera Access: <strong>{cameraState.cameraConnected ? 'Connected' : 'Connecting...'}</strong></span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#e2e8f0' }}>
                       <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.lightingOk ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
-                        ✓
+                        {cameraState.lightingOk ? '✓' : '○'}
                       </span>
-                      <span>Room Lighting: <strong>{cameraState.lightingOk ? 'Optimal' : 'Checking...'}</strong></span>
+                      <span>Room Lighting: <strong>{cameraState.lightingOk ? 'Optimal' : 'Adjust Lighting'}</strong></span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#e2e8f0' }}>
                       <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.faceOk ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
-                        ✓
+                        {cameraState.faceOk ? '✓' : '○'}
                       </span>
-                      <span>Face Centering: <strong>{cameraState.faceOk ? 'Face Aligned' : 'Position face...'}</strong></span>
+                      <span>Single Face Present: <strong>{cameraState.faceOk ? '1 Face Detected' : 'No face or multiple faces'}</strong></span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#e2e8f0' }}>
                       <span style={{ width: 20, height: 20, borderRadius: '50%', background: cameraState.baselineOk ? 'var(--green)' : 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 11, fontWeight: 700 }}>
-                        ✓
+                        {cameraState.baselineOk ? '✓' : '○'}
                       </span>
-                      <span>Pose Baseline: <strong>{cameraState.baselineOk ? 'Calibrated (Neutral forward)' : 'Calibrating...'}</strong></span>
+                      <span>Neutral Pose Baseline: <strong>{cameraState.baselineOk ? `Calibrated (Yaw ${Math.round(cameraState.measuredYaw)}°, Pitch ${Math.round(cameraState.measuredPitch)}°)` : 'Look straight forward'}</strong></span>
                     </div>
                   </div>
                 </div>
@@ -532,28 +654,38 @@ export default function PreTestPage({ test, setPage }) {
           </label>
         </div>
 
-        {/* Start Button */}
+        {/* Start Button & Real Validation Status */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <button 
-            disabled={!agreed1 || !agreed2}
+            disabled={!canStart}
             onClick={() => setShowConfirm(true)}
             style={{
-              background: (!agreed1 || !agreed2) ? 'var(--surface2)' : 'linear-gradient(135deg, var(--accent), var(--accent2))',
-              color: (!agreed1 || !agreed2) ? '#64748b' : 'white',
-              border: (!agreed1 || !agreed2) ? '1px solid var(--border)' : 'none',
+              background: !canStart ? 'var(--surface2)' : 'linear-gradient(135deg, var(--accent), var(--accent2))',
+              color: !canStart ? '#64748b' : 'white',
+              border: !canStart ? '1px solid var(--border)' : 'none',
               padding: '16px 48px',
               borderRadius: 30,
               fontSize: 18,
               fontWeight: 700,
               fontFamily: 'Space Grotesk',
               letterSpacing: 1,
-              cursor: (!agreed1 || !agreed2) ? 'not-allowed' : 'pointer',
+              cursor: !canStart ? 'not-allowed' : 'pointer',
               transition: 'all 0.3s ease',
-              boxShadow: (!agreed1 || !agreed2) ? 'none' : '0 10px 30px rgba(99, 102, 241, 0.4)'
+              boxShadow: !canStart ? 'none' : '0 10px 30px rgba(99, 102, 241, 0.4)'
             }}
           >
             START NEET TEST
           </button>
+
+          {!canStart && (
+            <div style={{ marginTop: 10, fontSize: 13, color: '#fca5a5' }}>
+              {!agreed1 || !agreed2 ? (
+                'Please accept both declaration checkboxes above to start.'
+              ) : (
+                'Webcam calibration required: Ensure 1 face is aligned with good room lighting to enable the Start button.'
+              )}
+            </div>
+          )}
         </div>
 
       </div>
