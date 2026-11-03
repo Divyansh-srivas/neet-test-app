@@ -5,7 +5,7 @@ import { Clock, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, AlertTriangl
 import NotesPad from '../components/NotesPad'
 import { useAuth } from '../utils/useAuth'
 import { createNotification } from '../api/notifications'
-import { startTestAttempt, saveAttemptState, submitAttempt, recordViolation } from '../api/exam'
+import { startTestAttempt, saveAttemptState, submitAttempt, recordViolation, getAttemptViolations } from '../api/exam'
 import { CameraProctor } from '../utils/cameraProctor'
 import { CAMERA_PROCTORING_ENABLED } from '../config/proctoring'
 import { Camera, Eye, VideoOff } from 'lucide-react'
@@ -73,6 +73,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraWarningText, setCameraWarningText] = useState(null)
   const [proctorNotice, setProctorNotice] = useState(null)
+  const [syncWarning, setSyncWarning] = useState(null)
 
   // Group questions by subject
   let subjectGroups = []
@@ -112,9 +113,18 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
           if (mounted) {
             setAttemptId(attempt.id)
             setQuestionStates(attempt.question_states || {})
-            const localCount = localStorage.getItem(`attempt_${test.id}_violations`) || localStorage.getItem(`attempt_${attempt.id}_violations`)
-            const restoredCount = Math.max(attempt.violation_count || 0, localCount ? Number(localCount) : 0)
-            setViolationCount(restoredCount)
+            // Fetch authoritative violation count from backend
+            let serverViolations = attempt.violation_count || 0;
+            try {
+              const vData = await getAttemptViolations(attempt.id);
+              if (vData && typeof vData.count === 'number') {
+                serverViolations = Math.max(serverViolations, vData.count);
+              }
+            } catch (_) {}
+
+            const localCount = localStorage.getItem(`attempt_${test.id}_violations`) || localStorage.getItem(`attempt_${attempt.id}_violations`);
+            const restoredCount = Math.max(serverViolations, localCount ? Number(localCount) : 0);
+            setViolationCount(restoredCount);
             const elapsed = Math.floor((Date.now() - new Date(attempt.started_at).getTime()) / 1000)
             setTimeLeft(Math.max(0, totalSeconds - elapsed))
           }
@@ -209,7 +219,14 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
         setViolationCount(newCount);
         
         if (attemptId && profile?.id) {
-          recordViolation(attemptId, profile.id, 'Exited Fullscreen').catch(console.error)
+          recordViolation(attemptId, profile.id, 'Exited Fullscreen', null, ({ message }) => {
+            setSyncWarning(message);
+          }).then(res => {
+            if (res && res.count) {
+              setViolationCount(res.count);
+              if (res.autoSubmit || res.count >= MAX_VIOLATIONS) handleSubmit(true);
+            }
+          }).catch(console.error);
         }
 
         if (newCount >= MAX_VIOLATIONS) {
@@ -281,7 +298,14 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
         } catch (e) {}
 
         if (attemptId && profile?.id) {
-          recordViolation(attemptId, profile.id, violationType, snapshotBase64).catch(console.error);
+          recordViolation(attemptId, profile.id, violationType, snapshotBase64, ({ message }) => {
+            setSyncWarning(message);
+          }).then(res => {
+            if (res && res.count) {
+              setViolationCount(res.count);
+              if (res.autoSubmit || res.count >= MAX_VIOLATIONS) handleSubmit(true);
+            }
+          }).catch(console.error);
         }
 
         if (autoSubmit || newCount >= MAX_VIOLATIONS) {
@@ -606,6 +630,26 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
           }}>
             <span>ℹ️ {proctorNotice}</span>
             <button onClick={() => setProctorNotice(null)} style={{ background: 'transparent', border: 'none', color: '#fef08a', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>✕</button>
+          </div>
+        )}
+
+        {/* Network Sync Warning Banner (Non-blocking) */}
+        {syncWarning && (
+          <div style={{
+            background: 'color-mix(in srgb, var(--red) 20%, var(--surface))',
+            borderBottom: '1px solid var(--red)',
+            padding: '10px 20px',
+            fontSize: 12,
+            color: '#fca5a5',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            position: 'sticky',
+            top: proctorNotice ? 36 : 0,
+            zIndex: 65
+          }}>
+            <span>⚠️ {syncWarning}</span>
+            <button onClick={() => setSyncWarning(null)} style={{ background: 'transparent', border: 'none', color: '#fca5a5', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>✕</button>
           </div>
         )}
 
