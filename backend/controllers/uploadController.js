@@ -4,8 +4,11 @@ import { logger } from '../utils/logger.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import fs from 'fs';
 import path from 'path';
+import { reserveExtraction, refundExtraction } from '../billing/entitlement.js';
 
 export const uploadPdf = async (req, res, next) => {
+    let charged = false;
+    let jobIdForRefund = null;
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No PDF file uploaded' });
@@ -14,10 +17,18 @@ export const uploadPdf = async (req, res, next) => {
         const userId = req.user.id;
         const token = req.token;
         const { testName, duration } = req.body;
-        const rawLanguage = req.body.language;
-        const language = ['English', 'Hindi', 'Bilingual'].includes(rawLanguage) ? rawLanguage : 'English';
         const uploadId = uuidv4();
         const jobId = uuidv4();
+
+        // Paid extraction: take one credit up front (atomic). Refunded below if anything fails before the job is queued;
+        // after that, a DB trigger refunds it when the job ends 'failed'.
+        const reservation = await reserveExtraction(req.user, jobId);
+        if (!reservation.ok) {
+            try { fs.unlinkSync(req.file.path); } catch (_) {}
+            return res.status(reservation.status).json({ error: reservation.error, code: reservation.code });
+        }
+        charged = reservation.charged;
+        jobIdForRefund = jobId;
 
         // Ensure uploads directory exists
         const uploadDir = path.resolve('uploads');
@@ -28,7 +39,7 @@ export const uploadPdf = async (req, res, next) => {
         const finalPath = path.join(uploadDir, `${uploadId}.pdf`);
         fs.renameSync(req.file.path, finalPath);
 
-        logger.info(`Received PDF upload from user ${userId} (language: ${language}). Uploading to Supabase Storage...`);
+        logger.info(`Received PDF upload from user ${userId}. Uploading to Supabase Storage...`);
 
         // Upload to Supabase Storage
         const fileBuffer = fs.readFileSync(finalPath);
@@ -47,6 +58,7 @@ export const uploadPdf = async (req, res, next) => {
             // is safer than silently continuing and hitting an unrecoverable
             // ENOENT later, deep inside the extraction pipeline.
             try { fs.unlinkSync(finalPath); } catch (_) {}
+            if (charged) await refundExtraction(jobId);
             return res.status(502).json({
                 error: 'Failed to store the PDF durably (Supabase Storage upload failed). Please try again.'
             });
@@ -73,8 +85,7 @@ export const uploadPdf = async (req, res, next) => {
             storagePath: `${userId}/${uploadId}.pdf`,
             token,
             testName,
-            duration,
-            language
+            duration
         }, { 
             jobId,
             attempts: 2,
@@ -83,6 +94,7 @@ export const uploadPdf = async (req, res, next) => {
 
         res.status(202).json({ success: true, jobId });
     } catch (error) {
+        if (charged && jobIdForRefund) await refundExtraction(jobIdForRefund);
         next(error);
     }
 };

@@ -202,8 +202,10 @@ export function JobProvider({ children }) {
       });
 
       if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error || 'Upload failed');
+          const errorData = await res.json().catch(() => ({}));
+          const err = new Error(errorData.error || 'Upload failed');
+          err.code = errorData.code;
+          throw err;
       }
 
       const data = await res.json();

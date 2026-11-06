@@ -12,7 +12,7 @@ import { getPdfFile } from '../controllers/pdfController.js';
 import { checkSchema } from '../controllers/debugController.js';
 import { deleteTest as deleteTestCtrl, getTests } from '../controllers/testsController.js';
 import * as libAdmin from '../controllers/libraryAdminController.js';
-import { recordViolation, getAttemptViolations } from '../controllers/violationsController.js';
+import { getPlans, getStatus, createOrder, verifyPayment, webhook } from '../controllers/billingController.js';
 
 const router = express.Router();
 
@@ -84,9 +84,18 @@ router.get('/debug/deploy', (req, res) => {
 
 // Debug start worker
 // Debug endpoints removed
+// Razorpay webhook: no user token, authenticated by HMAC signature instead (must stay above authenticate)
+router.post('/billing/webhook', webhook);
+
 // Protect all API routes
 router.use(authenticate);
 router.use(apiLimiter);
+
+// Billing API
+router.get('/billing/plans', getPlans);
+router.get('/billing/status', getStatus);
+router.post('/billing/order', createOrder);
+router.post('/billing/verify', verifyPayment);
 
 // Upload API
 router.post('/upload', uploadLimiter, upload.single('file'), uploadPdf);
@@ -99,10 +108,6 @@ router.delete('/jobs/:id', deleteJob);
 // Tests API
 router.get('/tests', getTests);
 router.delete('/tests/:id', deleteTestCtrl);
-
-// Anti-Cheat & Proctoring Violations API (Authoritative Backend Persistence)
-router.post('/attempts/:attemptId/violations', recordViolation);
-router.get('/attempts/:attemptId/violations', getAttemptViolations);
 
 // Notes API
 router.get('/notes/:testId', getNotes);

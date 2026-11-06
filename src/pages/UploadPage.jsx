@@ -4,6 +4,7 @@ import { useAuth } from '../utils/useAuth'
 import { useJob } from '../utils/JobContext'
 import { createNotification } from '../api/notifications'
 import MathText from '../components/MathText'
+import { useBilling } from '../utils/BillingContext'
 
 export default function UploadPage({ setPage, setActiveTest }) {
   const { profile } = useAuth()
@@ -19,6 +20,7 @@ export default function UploadPage({ setPage, setActiveTest }) {
   const [language, setLanguage] = useState('English')
   const fileRef = useRef()
   const { uploadPdf, clearAllJobs } = useJob()
+  const { status: billing, refresh: refreshBilling, openPlans } = useBilling()
 
   const handleFile = (f) => {
     if (f?.type === 'application/pdf') {
@@ -48,6 +50,12 @@ export default function UploadPage({ setPage, setActiveTest }) {
     if (!file) { setStatus('error'); setMessage('Please select a PDF file.'); return }
     if (!testName.trim()) { setStatus('error'); setMessage('Please enter a test name.'); return }
 
+    // Paid extraction: no credits -> open the plans popup instead of uploading
+    const b = await refreshBilling()
+    if (b && b.paywallEnabled && !b.unlimited && b.remaining <= 0) {
+      setStatus('error'); setMessage('You have no extractions left. Subscribe to a plan to continue.'); openPlans(); return
+    }
+
     setStatus('loading')
     setQuestions([])
     setExtractionStats(null)
@@ -60,7 +68,10 @@ export default function UploadPage({ setPage, setActiveTest }) {
       setMessage('Upload complete. Extraction is running in the background. You may safely navigate away.');
       setFile(null);
       setTestName('');
+      refreshBilling()
     } catch (err) {
+      if (err.code === 'NO_CREDITS') openPlans()
+      refreshBilling()
       setStatus('error');
       setMessage(err.message || 'Failed to upload PDF.');
     }
@@ -74,6 +85,12 @@ export default function UploadPage({ setPage, setActiveTest }) {
     <div style={{ maxWidth: 640, margin: '0 auto', paddingBottom: 60 }}>
       <h1 style={{ fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>Upload Test Paper</h1>
       <p style={{ color: 'var(--muted)', marginBottom: 28, fontSize: 14 }}>Upload all major institute PDFs and DPPs — AI will extract all questions automatically.</p>
+      {billing?.paywallEnabled && !billing.unlimited && (
+        <div style={{ marginBottom: 18, padding: '10px 14px', borderRadius: 12, fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, background: billing.remaining > 0 ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)', border: `1px solid ${billing.remaining > 0 ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`, color: billing.remaining > 0 ? '#4ade80' : '#fbbf24' }}>
+          <span>{billing.remaining > 0 ? `${billing.remaining} extraction${billing.remaining === 1 ? '' : 's'} left. Each PDF uses 1.` : 'No extractions left. Subscribe to extract this PDF.'}</span>
+          <button onClick={openPlans} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>{billing.remaining > 0 ? 'Get more' : 'View plans'}</button>
+        </div>
+      )}
 
       {/* Test Name & Duration */}
       <div style={{ marginBottom: 16, display: 'flex', gap: 12 }}>

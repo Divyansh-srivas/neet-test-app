@@ -22,6 +22,10 @@ import LogoutConfirmModal from './components/LogoutConfirmModal'
 import { SettingsProvider } from './utils/SettingsContext'
 import { JobProvider } from './utils/JobContext'
 import JobProgressWidget from './components/JobProgressWidget'
+import { BillingProvider } from './utils/BillingContext'
+import SubscribePill from './components/SubscribePill'
+import PlansModal from './components/PlansModal'
+import RefundPolicyPage from './pages/RefundPolicyPage'
 
 function AppContent() {
   const { user, profile, loading, signOut, completeEmailSignIn } = useAuth()
@@ -162,6 +166,7 @@ function AppContent() {
 
         {!isExam && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+            <SubscribePill />
             <NotificationCenter align="right" direction="down" />
             <button onClick={() => setIsLogoutModalOpen(true)} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
@@ -186,6 +191,7 @@ function AppContent() {
         {page === 'settings' && <SettingsPage />}
 
         <JobProgressWidget setPage={setPage} setPendingStartTestId={setPendingStartTestId} />
+        <PlansModal setPage={setPage} />
       </main>
 
       <style>{`
@@ -217,6 +223,7 @@ import { getAppearanceSettings } from './api/appearance'
 export default function App() {
   const isPrivacy = window.location.pathname === '/privacy-policy'
   const isTerms = window.location.pathname === '/terms-and-conditions'
+  const isRefund = window.location.pathname === '/refund-policy'
   const isReset = window.location.pathname === '/reset-password' || window.location.hash.includes('type=recovery')
 
   useEffect(() => {
@@ -278,6 +285,10 @@ export default function App() {
     return <TermsPage />
   }
 
+  if (isRefund) {
+    return <RefundPolicyPage />
+  }
+
   if (isReset) {
     return <ResetPasswordPage />
   }
@@ -286,7 +297,9 @@ export default function App() {
     <AuthProvider>
       <SettingsProvider>
         <JobProvider>
-          <AppContent />
+          <BillingProvider>
+            <AppContent />
+          </BillingProvider>
         </JobProvider>
       </SettingsProvider>
     </AuthProvider>
