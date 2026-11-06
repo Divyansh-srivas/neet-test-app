@@ -70,6 +70,10 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
 
   const videoRef = useRef(null)
   const proctorRef = useRef(null)
+  // Always points at the latest handleSubmit. The camera effect uses this instead of listing handleSubmit in its
+  // dependency array (handleSubmit is declared further down, which crashed the page with a TDZ error, and its
+  // identity changes on every answer, which would restart the camera proctor each time).
+  const handleSubmitRef = useRef(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraWarningText, setCameraWarningText] = useState(null)
   const [proctorNotice, setProctorNotice] = useState(null)
@@ -303,13 +307,13 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
           }).then(res => {
             if (res && res.count) {
               setViolationCount(res.count);
-              if (res.autoSubmit || res.count >= MAX_VIOLATIONS) handleSubmit(true);
+              if (res.autoSubmit || res.count >= MAX_VIOLATIONS) handleSubmitRef.current?.(true);
             }
           }).catch(console.error);
         }
 
         if (autoSubmit || newCount >= MAX_VIOLATIONS) {
-          await handleSubmit(true);
+          await handleSubmitRef.current?.(true);
         } else {
           setShowViolationWarning(true);
         }
@@ -334,7 +338,7 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
       active = false;
       proctor.stop();
     };
-  }, [isCameraMode, attemptId, profile?.id, handleSubmit]);
+  }, [isCameraMode, attemptId, profile?.id]);
 
 
   const requestFullscreenAgain = () => {
@@ -429,6 +433,8 @@ export default function ExamPage({ test, setPage, setActiveTest }) {
     
     setPage('analysis')
   }, [questionStates, timeLeft, test, questions, profile?.id, attemptId])
+
+  handleSubmitRef.current = handleSubmit
 
   const q = questions[current]
   const attempted = Object.values(questionStates).filter(qs => !!qs.selectedOption).length
