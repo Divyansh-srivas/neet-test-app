@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import fs from 'fs';
 import path from 'path';
 import { reserveExtraction, refundExtraction } from '../billing/entitlement.js';
+import { getTotalPages } from '../services/pdf.service.js';
 
 export const uploadPdf = async (req, res, next) => {
     let charged = false;
@@ -22,9 +23,20 @@ export const uploadPdf = async (req, res, next) => {
         const uploadId = uuidv4();
         const jobId = uuidv4();
 
-        // Paid extraction: take one credit up front (atomic). Refunded below if anything fails before the job is queued;
+        // Determine PDF page count before billing reservation (<=30: 1 credit, 31-60: 2, >60: 3)
+        let pageCount = parseInt(req.body.pageCount, 10);
+        if (!pageCount || isNaN(pageCount) || pageCount <= 0) {
+            try {
+                pageCount = await getTotalPages(req.file.path);
+            } catch (e) {
+                logger.warn(`Could not determine page count before reservation: ${e.message}`);
+                pageCount = 1;
+            }
+        }
+
+        // Paid extraction: debit credits based on pages (atomic). Refunded below if anything fails before the job is queued;
         // after that, a DB trigger refunds it when the job ends 'failed'.
-        const reservation = await reserveExtraction(req.user, jobId);
+        const reservation = await reserveExtraction(req.user, jobId, pageCount);
         if (!reservation.ok) {
             try { fs.unlinkSync(req.file.path); } catch (_) {}
             return res.status(reservation.status).json({ error: reservation.error, code: reservation.code });
@@ -88,7 +100,8 @@ export const uploadPdf = async (req, res, next) => {
             token,
             testName,
             duration,
-            language
+            language,
+            pageCount
         }, { 
             jobId,
             attempts: 2,

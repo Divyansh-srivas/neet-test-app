@@ -11,7 +11,15 @@ export const getPlan = (id) => PLANS.find((p) => p.id === id) || null;
 export const toPaise = (inr) => Math.round(inr * 100);
 
 export const publicPlans = () =>
-  PLANS.map((p) => ({ ...p, amountPaise: toPaise(p.priceInr), perExtractionInr: Math.round(p.priceInr / p.extractions) }));
+  PLANS.map((p) => ({ ...p, amountPaise: toPaise(p.priceInr) }));
+
+// Pages per credit: <=30 pages = 1 credit, 31-60 = 2 credits, >60 = 3 credits.
+export const creditsForPages = (pages) => {
+  const p = Number(pages) || 0;
+  if (p <= 30) return 1;
+  if (p <= 60) return 2;
+  return 3;
+};
 
 // Pure helpers (unit-tested) ---------------------------------------------------
 export const addDays = (date, days) => new Date(new Date(date).getTime() + days * 86400000);

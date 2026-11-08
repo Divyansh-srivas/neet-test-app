@@ -144,7 +144,6 @@ export default function PlansModal({ setPage }) {
                           <div className="ng-ext"><b>{p.extractions}</b> extractions</div>
                           <ul>
                             <li><Check size={13} /> Valid {p.validDays >= 180 ? `${Math.round(p.validDays / 30)} months` : p.validDays === 90 ? '3 months' : '1 month'}</li>
-                            <li><Check size={13} /> ≈ ₹{p.perExtractionInr} per extraction</li>
                             <li><Check size={13} /> Failed extraction = credit back</li>
                           </ul>
                           <div className="ng-tag">{p.tagline}</div>

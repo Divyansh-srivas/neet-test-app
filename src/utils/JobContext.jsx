@@ -189,12 +189,13 @@ export function JobProvider({ children }) {
       }
   };
 
-  const uploadPdf = async (file, testName, duration, language = 'English') => {
+  const uploadPdf = async (file, testName, duration, language = 'English', pageCount = null) => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('testName', testName);
       formData.append('duration', duration);
       formData.append('language', language);
+      if (pageCount) formData.append('pageCount', pageCount);
 
       const res = await fetchAPI('/api/upload', {
           method: 'POST',

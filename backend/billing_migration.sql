@@ -25,45 +25,93 @@ create table if not exists extraction_ledger (
   user_id text not null,
   job_id uuid not null unique,
   purchase_id uuid references plan_purchases(id),
+  credits int not null default 1,
   status text not null default 'consumed' check (status in ('consumed','refunded')),
   created_at timestamptz not null default now(),
   refunded_at timestamptz
 );
+alter table extraction_ledger add column if not exists credits int not null default 1;
 
 alter table plan_purchases enable row level security;
 alter table extraction_ledger enable row level security;
 
--- Atomically take one credit (earliest-expiring pack first). Returns pack id, or NULL when no credit.
+-- Atomically take p_credits (earliest-expiring pack first). Returns pack id, or NULL when insufficient credits.
+create or replace function consume_extraction_credit(p_user text, p_job uuid, p_credits int default 1)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_available int;
+  v_pack record;
+  v_needed int := coalesce(p_credits, 1);
+  v_take int;
+  v_first_pack uuid := null;
+begin
+  if v_needed <= 0 then v_needed := 1; end if;
+  perform pg_advisory_xact_lock(hashtext(p_user));
+
+  -- Already consumed for this job? (idempotent)
+  select purchase_id into v_first_pack from extraction_ledger where job_id = p_job limit 1;
+  if found then return v_first_pack; end if;
+
+  -- Verify total unexpired credits available across all paid packs
+  select coalesce(sum(credits_total - credits_used), 0) into v_available
+    from plan_purchases
+   where user_id = p_user and status = 'paid' and expires_at > now() and credits_used < credits_total;
+
+  if v_available < v_needed then
+    return null; -- Insufficient credits
+  end if;
+
+  -- Debit credits from earliest-expiring packs
+  for v_pack in
+    select id, (credits_total - credits_used) as remaining
+      from plan_purchases
+     where user_id = p_user and status = 'paid' and expires_at > now() and credits_used < credits_total
+     order by expires_at asc
+     for update
+  loop
+    v_take := least(v_needed, v_pack.remaining);
+    update plan_purchases set credits_used = credits_used + v_take where id = v_pack.id;
+    if v_first_pack is null then v_first_pack := v_pack.id; end if;
+    v_needed := v_needed - v_take;
+    exit when v_needed <= 0;
+  end loop;
+
+  insert into extraction_ledger(user_id, job_id, purchase_id, credits)
+  values (p_user, p_job, v_first_pack, coalesce(p_credits, 1));
+
+  return v_first_pack;
+end $$;
+
+-- Overload for backwards compatibility with 2 arguments
 create or replace function consume_extraction_credit(p_user text, p_job uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
-declare v_pack uuid;
 begin
-  perform pg_advisory_xact_lock(hashtext(p_user));
-  select purchase_id into v_pack from extraction_ledger where job_id = p_job;
-  if found then return v_pack; end if;
-  select id into v_pack from plan_purchases
-   where user_id = p_user and status = 'paid' and expires_at > now() and credits_used < credits_total
-   order by expires_at asc limit 1 for update;
-  if v_pack is null then return null; end if;
-  update plan_purchases set credits_used = credits_used + 1 where id = v_pack;
-  insert into extraction_ledger(user_id, job_id, purchase_id) values (p_user, p_job, v_pack);
-  return v_pack;
+  return consume_extraction_credit(p_user, p_job, 1);
 end $$;
 
 -- Give the credit back (idempotent: only works once per job).
 create or replace function refund_extraction_credit(p_job uuid)
 returns boolean language plpgsql security definer set search_path = public as $$
-declare v_pack uuid;
+declare
+  v_rec record;
 begin
-  update extraction_ledger set status = 'refunded', refunded_at = now()
-   where job_id = p_job and status = 'consumed' returning purchase_id into v_pack;
-  if v_pack is null then return false; end if;
-  update plan_purchases set credits_used = greatest(credits_used - 1, 0) where id = v_pack;
-  return true;
+  for v_rec in
+    update extraction_ledger
+       set status = 'refunded', refunded_at = now()
+     where job_id = p_job and status = 'consumed'
+     returning purchase_id, coalesce(credits, 1) as credits
+  loop
+    update plan_purchases
+       set credits_used = greatest(credits_used - v_rec.credits, 0)
+     where id = v_rec.purchase_id;
+  end loop;
+  return found;
 end $$;
 
+revoke all on function consume_extraction_credit(text, uuid, int) from public, anon, authenticated;
 revoke all on function consume_extraction_credit(text, uuid) from public, anon, authenticated;
 revoke all on function refund_extraction_credit(uuid) from public, anon, authenticated;
+grant execute on function consume_extraction_credit(text, uuid, int) to service_role;
 grant execute on function consume_extraction_credit(text, uuid) to service_role;
 grant execute on function refund_extraction_credit(uuid) to service_role;
 
