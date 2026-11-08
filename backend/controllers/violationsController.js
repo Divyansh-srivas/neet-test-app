@@ -47,17 +47,28 @@ export const recordViolation = async (req, res, next) => {
 
                 if (!updateErr) {
                     dbSucceeded = true;
-                    // Insert into test_violations table
-                    await supabaseAdmin.from('test_violations').insert({
+                    // Insert into test_violations table. NOTE: supabase query builders are thenables with no .catch(),
+                    // so the result must be awaited and its { error } checked (errors are returned, not thrown).
+                    const auditRow = {
                         attempt_id: attemptId,
                         student_id: userId,
                         violation_type: violationType || 'Unknown',
                         browser: browser || req.headers['user-agent'] || 'Unknown',
-                        device: device || 'Desktop',
-                        snapshot: (snapshot && typeof snapshot === 'string' && snapshot.length <= 150000) ? snapshot : null
-                    }).catch(err => {
-                        logger.warn(`Non-blocking error inserting audit row into test_violations: ${err.message}`);
-                    });
+                        device: device || 'Desktop'
+                    };
+                    const snap = (snapshot && typeof snapshot === 'string' && snapshot.length <= 150000) ? snapshot : null;
+                    let { error: insErr } = await supabaseAdmin.from('test_violations').insert({ ...auditRow, snapshot: snap });
+                    if (insErr && snap !== null) {
+                        // e.g. production table has no snapshot column yet: still record the violation without it
+                        logger.warn(`test_violations insert with snapshot failed (${insErr.message}); retrying without snapshot`);
+                        ({ error: insErr } = await supabaseAdmin.from('test_violations').insert(auditRow));
+                    } else if (insErr) {
+                        // retry once without the snapshot key in case the column is missing even for a null snapshot
+                        ({ error: insErr } = await supabaseAdmin.from('test_violations').insert(auditRow));
+                    }
+                    if (insErr) {
+                        logger.error(`Failed to insert audit row into test_violations: ${insErr.message}`);
+                    }
                 } else {
                     logger.warn(`Failed to update attempts.violation_count: ${updateErr.message}`);
                 }
