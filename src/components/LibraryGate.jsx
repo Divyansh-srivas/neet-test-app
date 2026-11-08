@@ -23,8 +23,7 @@ export default function LibraryGate() {
         <div className="lib-orb">{LIBRARY_COMING_SOON ? <Clock size={30} /> : <Lock size={30} />}</div>
         {LIBRARY_COMING_SOON ? (
           <>
-            <h2 className="lib-title">Coming Soon</h2>
-            <p className="lib-sub">We are building the Library by hand, with care. It will be live very soon.</p>
+            <h2 className="lib-title soon">Coming Soon</h2>
           </>
         ) : (
           <>
@@ -44,6 +43,7 @@ export default function LibraryGate() {
           background:linear-gradient(135deg,#15803d,#22c55e);animation:libBox 2.6s ease-in-out infinite}
         .lib-title{margin:0 0 10px;font-size:40px;font-weight:800;letter-spacing:-1px;color:#fff;animation:libText 2.6s ease-in-out infinite}
         .lib-title.lock{font-size:30px}
+        .lib-title.soon{margin-bottom:24px}
         .lib-sub{margin:0 0 22px;color:var(--muted,#94a3b8);font-size:14.5px;line-height:1.6}
         .lib-btn{display:inline-flex;align-items:center;gap:7px;padding:11px 18px;border-radius:12px;border:1px solid rgba(255,255,255,.25);cursor:pointer;color:#fff;font-weight:700;font-size:13.5px;background:linear-gradient(135deg,#15803d,#22c55e)}
         .lib-pill.ok{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:99px;background:rgba(34,197,94,.14);color:#4ade80;font-size:13px;font-weight:600}
