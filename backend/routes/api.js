@@ -12,6 +12,7 @@ import { getPdfFile } from '../controllers/pdfController.js';
 import { checkSchema } from '../controllers/debugController.js';
 import { deleteTest as deleteTestCtrl, getTests } from '../controllers/testsController.js';
 import * as libAdmin from '../controllers/libraryAdminController.js';
+import { recordViolation, getAttemptViolations } from '../controllers/violationsController.js';
 import { getPlans, getStatus, createOrder, verifyPayment, webhook } from '../controllers/billingController.js';
 
 const router = express.Router();
@@ -108,6 +109,10 @@ router.delete('/jobs/:id', deleteJob);
 // Tests API
 router.get('/tests', getTests);
 router.delete('/tests/:id', deleteTestCtrl);
+
+// Anti-Cheat & Proctoring Violations API (Authoritative Backend Persistence)
+router.post('/attempts/:attemptId/violations', recordViolation);
+router.get('/attempts/:attemptId/violations', getAttemptViolations);
 
 // Notes API
 router.get('/notes/:testId', getNotes);

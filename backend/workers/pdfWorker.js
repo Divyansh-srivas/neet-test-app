@@ -8,7 +8,7 @@ import { refundExtraction } from '../billing/entitlement.js';
 
 export const createPdfWorker = (io) => {
     return new Worker('pdf-upload', async job => {
-        const { uploadId, userId, filePath, storagePath, token, testName, duration } = job.data;
+        const { uploadId, userId, filePath, storagePath, token, testName, duration, language = 'English' } = job.data;
         const supabase = supabaseAdmin;
         
         io.to(userId).emit('job-started', { jobId: job.id });
@@ -96,7 +96,7 @@ export const createPdfWorker = (io) => {
                     
                     if (matchingJobs && matchingJobs.length > 0) {
                         const matchingJob = matchingJobs[0];
-                        if (matchingJob.metadata?.promptVersion === 'v4' && !job.data.forceReextract) {
+                        if (matchingJob.metadata?.promptVersion === 'v4' && !matchingJob.metadata?.needsReview && !job.data.forceReextract) {
                             logger.info(`[DEDUPE] Found completed job ${matchingJob.id} for hash ${fileHash}. Bypassing AI.`);
                             
                             // Send directly to saveWorker or clone here?
@@ -130,7 +130,8 @@ export const createPdfWorker = (io) => {
                 token,
                 testName,
                 duration,
-                fileHash
+                fileHash,
+                language
             }, {
                 attempts: 2,
                 backoff: { type: 'fixed', delay: 5000 }
