@@ -1,7 +1,9 @@
 import React from 'react'
-import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle, Library, Database, LifeBuoy } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle, Library, Database, LifeBuoy, Lock } from 'lucide-react'
 import logoImg from '../assets/logo.jpg'
 import { useAuth } from '../utils/useAuth.jsx'
+import { useBilling } from '../utils/BillingContext'
+import { isLibraryUnlocked } from '../utils/libraryAccess'
 
 
 export default function Navbar({ page, setPage }) {
@@ -16,6 +18,8 @@ export default function Navbar({ page, setPage }) {
   ]
 
   const { user } = useAuth();
+  const { status: billing } = useBilling();
+  const isLocked = (id) => id === 'library' && !!billing && !isLibraryUnlocked(billing);
   if (user?.email === 'gauravpatel5876@gmail.com') {
       navItems.push({ id: 'admin-library', label: 'Admin Library', icon: Database });
   }
@@ -52,6 +56,7 @@ export default function Navbar({ page, setPage }) {
             }}>
               <Icon size={17} />
               {label}
+              {isLocked(id) && <Lock size={12} style={{ marginLeft: 'auto', opacity: 0.75 }} aria-label="Locked" />}
             </button>
           ))}
         </nav>
@@ -80,7 +85,7 @@ export default function Navbar({ page, setPage }) {
             color: page === id ? '#a5b4fc' : 'var(--muted)', cursor: 'pointer', fontSize: 10,
           }}>
             <Icon size={20} />
-            {label}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>{label}{isLocked(id) && <Lock size={9} aria-label="Locked" />}</span>
           </button>
         ))}
 

@@ -29,5 +29,7 @@ export const summarizePacks = (packs, now = new Date()) => {
   const nextExpiry = usable.length
     ? usable.map((p) => new Date(p.expires_at)).sort((a, b) => a - b)[0].toISOString()
     : null;
-  return { remaining, nextExpiry, activePacks: usable.length };
+  // planActive: any paid, unexpired plan, even if every extraction credit is used up (drives Library access)
+  const planActive = (packs || []).some((p) => p && p.status === 'paid' && p.expires_at && new Date(p.expires_at) > now);
+  return { remaining, nextExpiry, activePacks: usable.length, planActive };
 };

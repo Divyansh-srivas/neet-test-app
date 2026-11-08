@@ -12,7 +12,7 @@ import ExamPage from './pages/ExamPage'
 import AnalysisPage from './pages/AnalysisPage'
 import BookmarksPage from './pages/BookmarksPage'
 import BacklogRescuePage from './pages/BacklogRescuePage'
-import LibraryPage from './pages/LibraryPage'
+import LibraryGate from './components/LibraryGate'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import AdminLibraryPage from './pages/AdminLibraryPage'
@@ -185,7 +185,7 @@ function AppContent() {
         {page === 'analysis' && activeTest && <AnalysisPage test={activeTest} setPage={setPage} />}
         {page === 'bookmarks' && <BookmarksPage />}
         {page === 'rescue' && <BacklogRescuePage />}
-        {page === 'library' && <LibraryPage />}
+        {page === 'library' && <LibraryGate />}
         {page === 'admin-library' && <AdminLibraryPage />}
         {page === 'profile' && <ProfilePage />}
         {page === 'settings' && <SettingsPage />}

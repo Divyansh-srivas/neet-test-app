@@ -31,6 +31,15 @@ t('summary adds packs and reports earliest expiry', () => {
   ], now);
   assert.equal(s.remaining, 27); assert.equal(s.activePacks, 2); assert.equal(s.nextExpiry, '2026-12-05T00:00:00.000Z');
 });
+t('planActive stays true after credits are used up, false after expiry/unpaid', () => {
+  const now = new Date('2026-11-10T00:00:00Z');
+  const base = { status: 'paid', credits_total: 7, credits_used: 7, expires_at: '2026-12-01T00:00:00Z' };
+  assert.equal(summarizePacks([base], now).planActive, true);
+  assert.equal(summarizePacks([base], now).remaining, 0);
+  assert.equal(summarizePacks([{ ...base, expires_at: '2026-11-01T00:00:00Z' }], now).planActive, false);
+  assert.equal(summarizePacks([{ ...base, status: 'created' }], now).planActive, false);
+  assert.equal(summarizePacks([], now).planActive, false);
+});
 t('NEET special expires 210 days after payment', () => {
   assert.equal(addDays('2026-11-06T00:00:00Z', 210).toISOString().slice(0, 10), '2027-06-04');
 });
