@@ -5,6 +5,7 @@ import { useAuth } from '../utils/useAuth.jsx'
 import { Upload, Play, FileText, Clock, CheckCircle, Trash2, Target, DownloadCloud } from 'lucide-react'
 import { getUserAnalytics } from '../api/performance'
 import { supabase } from '../utils/supabaseClient'
+import TestSeriesBanner from '../components/TestSeriesBanner'
 
 export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, setPendingStartTestId }) {
   const { profile: authProfile, user } = useAuth()
@@ -126,6 +127,8 @@ export default function Dashboard({ setPage, setActiveTest, pendingStartTestId, 
           </button>
         </div>
       </div>
+
+      <TestSeriesBanner setPage={setPage} />
 
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>

@@ -14,6 +14,7 @@ import { deleteTest as deleteTestCtrl, getTests } from '../controllers/testsCont
 import * as libAdmin from '../controllers/libraryAdminController.js';
 import { recordViolation, getAttemptViolations } from '../controllers/violationsController.js';
 import { getPlans, getStatus, createOrder, verifyPayment, webhook } from '../controllers/billingController.js';
+import * as series from '../controllers/testSeriesController.js';
 
 const router = express.Router();
 
@@ -97,6 +98,20 @@ router.get('/billing/plans', getPlans);
 router.get('/billing/status', getStatus);
 router.post('/billing/order', createOrder);
 router.post('/billing/verify', verifyPayment);
+
+// Test Series API (students: published syllabus + live tests only; admin: full control)
+router.get('/test-series', series.studentList);
+router.post('/test-series/:id/start', series.studentStart);
+router.get('/admin/test-series', series.adminList);
+router.post('/admin/test-series', series.adminCreate);
+router.put('/admin/test-series/:id', series.adminUpdate);
+router.delete('/admin/test-series/:id', series.adminDelete);
+router.post('/admin/test-series/:id/syllabus', series.adminSetSyllabus);
+router.post('/admin/test-series/:id/live', series.adminSetLive);
+router.get('/admin/test-series/:id/questions', series.adminListQuestions);
+router.post('/admin/test-series/:id/questions', series.adminAddQuestion);
+router.put('/admin/test-series/questions/:qid', series.adminUpdateQuestion);
+router.delete('/admin/test-series/questions/:qid', series.adminDeleteQuestion);
 
 // Upload API
 router.post('/upload', uploadLimiter, upload.single('file'), uploadPdf);

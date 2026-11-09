@@ -1,5 +1,5 @@
 import React from 'react'
-import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle, Library, Database, LifeBuoy, Lock } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Bookmark, User, Settings, FlaskConical, HelpCircle, Library, Database, LifeBuoy, Lock, ClipboardList } from 'lucide-react'
 import logoImg from '../assets/logo.jpg'
 import { useAuth } from '../utils/useAuth.jsx'
 import { useBilling } from '../utils/BillingContext'
@@ -13,6 +13,7 @@ export default function Navbar({ page, setPage }) {
     { id: 'rescue', label: 'Rescue', icon: LifeBuoy },
     { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
     { id: 'library', label: 'Library', icon: Library },
+    { id: 'series', label: 'Test Series', icon: ClipboardList },
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
@@ -22,6 +23,7 @@ export default function Navbar({ page, setPage }) {
   const isLocked = (id) => id === 'library' && !!billing && !isLibraryUnlocked(billing);
   if (user?.email === 'gauravpatel5876@gmail.com') {
       navItems.push({ id: 'admin-library', label: 'Admin Library', icon: Database });
+      navItems.push({ id: 'admin-series', label: 'Admin Test Series', icon: Database });
   }
 
   return (
